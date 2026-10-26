@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+import csv
 import json
 import os
 import re
@@ -10,6 +11,7 @@ import zipfile
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from html.parser import HTMLParser
 from typing import Any
 from urllib.parse import quote
 
@@ -26,7 +28,10 @@ from pypdf import PdfReader
 BASE_DIR = Path(__file__).resolve().parent.parent
 STATIC_DIR = BASE_DIR / "static"
 MAX_FILE_SIZE = 25 * 1024 * 1024
-SUPPORTED_EXTENSIONS = {".pdf", ".pptx", ".docx", ".txt", ".md"}
+SUPPORTED_EXTENSIONS = {
+    ".pdf", ".pptx", ".docx", ".txt", ".md", ".html", ".htm", ".epub", ".csv", ".srt", ".vtt"
+}
+MAX_ARCHIVE_UNCOMPRESSED_SIZE = 100 * 1024 * 1024
 
 
 def data_dir() -> Path:
@@ -108,6 +113,63 @@ def init_database() -> None:
 
 def clean_text(value: str) -> str:
     return re.sub(r"\s+", " ", value).strip()
+
+
+class ReadableHTMLParser(HTMLParser):
+    """Small dependency-free extractor for HTML and EPUB chapter content."""
+
+    BLOCK_TAGS = {"article", "blockquote", "br", "div", "h1", "h2", "h3", "h4", "h5", "h6", "li", "p", "section", "td", "th"}
+    SKIP_TAGS = {"script", "style", "svg", "noscript"}
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.blocks: list[str] = []
+        self.current: list[str] = []
+        self.skip_depth = 0
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag in self.SKIP_TAGS:
+            self.skip_depth += 1
+        elif tag in self.BLOCK_TAGS:
+            self.flush()
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag in self.SKIP_TAGS and self.skip_depth:
+            self.skip_depth -= 1
+        elif tag in self.BLOCK_TAGS:
+            self.flush()
+
+    def handle_data(self, data: str) -> None:
+        if not self.skip_depth and data.strip():
+            self.current.append(data)
+
+    def flush(self) -> None:
+        value = clean_text(" ".join(self.current))
+        if value:
+            self.blocks.append(value)
+        self.current = []
+
+    def result(self) -> list[str]:
+        self.flush()
+        return self.blocks
+
+
+def html_blocks(value: str) -> list[str]:
+    parser = ReadableHTMLParser()
+    parser.feed(value)
+    parser.close()
+    return parser.result()
+
+
+def validate_archive(contents: bytes, label: str) -> zipfile.ZipFile:
+    buffer = io.BytesIO(contents)
+    if not zipfile.is_zipfile(buffer):
+        raise HTTPException(status_code=400, detail=f"The uploaded {label} file is invalid")
+    archive = zipfile.ZipFile(buffer)
+    if sum(item.file_size for item in archive.infolist()) > MAX_ARCHIVE_UNCOMPRESSED_SIZE:
+        archive.close()
+        raise HTTPException(status_code=413, detail=f"The expanded {label} archive is too large")
+    return archive
 
 
 def split_sentences(text: str) -> list[str]:
@@ -369,8 +431,12 @@ def extract_document(filename: str, contents: bytes) -> tuple[str, int, list[dic
 
     if extension == ".pdf" and not contents.startswith(b"%PDF"):
         raise HTTPException(status_code=400, detail="The file extension is PDF, but the content is not a PDF")
-    if extension in {".pptx", ".docx"} and not zipfile.is_zipfile(io.BytesIO(contents)):
-        raise HTTPException(status_code=400, detail=f"The uploaded {extension.upper()} file is invalid")
+    if extension in {".pptx", ".docx", ".epub"}:
+        with validate_archive(contents, extension.upper()) as archive:
+            if extension == ".epub" and "mimetype" in archive.namelist():
+                mimetype = archive.read("mimetype").decode("ascii", errors="ignore").strip()
+                if mimetype and mimetype != "application/epub+zip":
+                    raise HTTPException(status_code=400, detail="The uploaded EPUB file is invalid")
 
     try:
         if extension == ".pdf":
@@ -401,6 +467,44 @@ def extract_document(filename: str, contents: bytes) -> tuple[str, int, list[dic
                 if table_text:
                     chunks.append({"ref": f"Table {table_index}", "text": table_text})
             units = max(block, 1)
+        elif extension == ".epub":
+            with zipfile.ZipFile(io.BytesIO(contents)) as archive:
+                chapter_names = sorted(
+                    name for name in archive.namelist()
+                    if name.lower().endswith((".xhtml", ".html", ".htm")) and not name.lower().endswith("nav.xhtml")
+                )
+                for index, name in enumerate(chapter_names, 1):
+                    raw = archive.read(name).decode("utf-8", errors="replace")
+                    chapter_text = clean_text(" ".join(html_blocks(raw)))
+                    if chapter_text:
+                        chunks.append({"ref": f"Chapter {index}", "text": chapter_text})
+            units = max(len(chunks), 1)
+        elif extension in {".html", ".htm"}:
+            decoded = contents.decode("utf-8-sig", errors="replace")
+            blocks = html_blocks(decoded)
+            chunks = [{"ref": f"Section {index}", "text": block} for index, block in enumerate(blocks, 1)]
+            units = max(len(chunks), 1)
+        elif extension == ".csv":
+            decoded = contents.decode("utf-8-sig", errors="replace")
+            rows = csv.reader(io.StringIO(decoded))
+            for index, row in enumerate(rows, 1):
+                row_text = clean_text(" · ".join(cell for cell in row if cell.strip()))
+                if row_text:
+                    chunks.append({"ref": f"Row {index}", "text": row_text})
+            units = max(len(chunks), 1)
+        elif extension in {".srt", ".vtt"}:
+            decoded = contents.decode("utf-8-sig", errors="replace")
+            decoded = re.sub(r"^WEBVTT[^\n]*", "", decoded, flags=re.IGNORECASE)
+            blocks = re.split(r"\n\s*\n", decoded)
+            cue_index = 0
+            for block in blocks:
+                lines = [line.strip() for line in block.splitlines() if line.strip()]
+                lines = [line for line in lines if not re.fullmatch(r"\d+", line) and "-->" not in line]
+                cue_text = clean_text(re.sub(r"<[^>]+>", " ", " ".join(lines)))
+                if cue_text:
+                    cue_index += 1
+                    chunks.append({"ref": f"Cue {cue_index}", "text": cue_text})
+            units = max(len(chunks), 1)
         else:
             decoded = contents.decode("utf-8-sig", errors="replace")
             paragraphs = [clean_text(part) for part in re.split(r"\n\s*\n", decoded) if clean_text(part)]

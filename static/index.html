@@ -38,6 +38,7 @@
           <h1 id="page-title">Dashboard</h1>
         </div>
         <div class="topbar-actions">
+          <label class="language-picker" aria-label="Interface language"><span aria-hidden="true">文</span><select id="language-select"><option value="en">EN</option><option value="ru">RU</option><option value="kk">ҚАЗ</option></select></label>
           <span class="api-state"><i></i> API ready</span>
           <button class="avatar" aria-label="Student profile">SC</button>
         </div>
@@ -85,14 +86,14 @@
               <div class="intro-copy">
                 <p class="eyebrow">STEP 1 OF 3</p>
                 <h2>Upload lecture material</h2>
-                <p>Upload PDF, PowerPoint, Word, Markdown, or text files up to 25 MB. StudyCloud keeps source locations attached to every learning object.</p>
+                <p>Upload PDF, PowerPoint, Word, Markdown, HTML, EPUB, CSV, subtitles, or text files up to 25 MB. StudyCloud keeps source locations attached to every learning object.</p>
               </div>
               <form id="upload-form">
                 <label class="dropzone" id="dropzone" for="file-input">
-                  <input id="file-input" name="file" type="file" accept=".pdf,.pptx,.docx,.txt,.md,application/pdf,application/vnd.openxmlformats-officedocument.presentationml.presentation,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/markdown" hidden>
+                  <input id="file-input" name="file" type="file" accept=".pdf,.pptx,.docx,.txt,.md,.html,.htm,.epub,.csv,.srt,.vtt,application/pdf,application/epub+zip,application/vnd.openxmlformats-officedocument.presentationml.presentation,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/markdown,text/html,text/csv,text/vtt" hidden>
                   <span class="upload-icon" aria-hidden="true">⇧</span>
                   <strong>Drop course material here or browse files</strong>
-                  <span>PDF · PPTX · DOCX · TXT · MD · max 25 MB</span>
+                  <span>PDF · PPTX · DOCX · EPUB · HTML · CSV · SRT · VTT · TXT · MD · max 25 MB</span>
                 </label>
                 <div class="selected-file" id="selected-file" hidden></div>
                 <button class="button button-primary full" id="upload-button" type="submit" disabled>Process lecture <span>✦</span></button>
@@ -105,7 +106,7 @@
             <aside class="process-card">
               <p class="eyebrow">HOW IT WORKS</p>
               <ol>
-                <li><span>1</span><div><strong>Extract</strong><p>Read pages, slides, paragraphs, and sections.</p></div></li>
+                <li><span>1</span><div><strong>Extract</strong><p>Read pages, slides, paragraphs, chapters, rows, and sections.</p></div></li>
                 <li><span>2</span><div><strong>Synthesize</strong><p>Create an evidence-backed summary and flashcards.</p></div></li>
                 <li><span>3</span><div><strong>Prove</strong><p>Test recall and send mistakes into ProofLoop.</p></div></li>
               </ol>
@@ -116,12 +117,12 @@
 
         <section class="view" data-view="summary" hidden>
           <div id="summary-empty" class="empty-state">
-            <span>✦</span><h2>No lecture selected</h2><p>Choose a lecture from the dashboard or upload a new PDF.</p><a class="button button-primary" href="#dashboard">Open library</a>
+            <span>✦</span><h2>No lecture selected</h2><p>Choose a lecture from the dashboard or upload a new file.</p><a class="button button-primary" href="#dashboard">Open library</a>
           </div>
           <div id="summary-content" hidden>
             <div class="document-header">
               <div><p class="eyebrow">AI LECTURE SUMMARY</p><h2 id="summary-title"></h2><div class="document-meta" id="summary-meta"></div></div>
-              <div class="document-actions"><button class="button button-secondary" id="edit-pack" type="button">Edit pack</button><a class="button button-secondary" id="export-link" href="#">Export .md</a><a class="button button-primary" href="#quiz">Start quiz <span>→</span></a></div>
+              <div class="document-actions"><button class="button button-secondary" id="edit-pack" type="button">Edit pack</button><a class="button button-secondary" id="source-link" href="#" target="_blank" rel="noopener">Open source</a><a class="button button-secondary" id="export-link" href="#">Export .md</a><a class="button button-primary" href="#quiz">Start quiz <span>→</span></a></div>
             </div>
             <form class="edit-pack-panel" id="edit-pack-form" hidden>
               <div class="edit-pack-heading"><div><p class="eyebrow">HUMAN IN THE LOOP</p><h2>Edit generated material</h2></div><button class="mini-button" id="cancel-edit-pack" type="button">Cancel</button></div>
@@ -136,7 +137,7 @@
             </div>
             <div class="study-tools-grid">
               <section class="flashcards-panel"><div class="section-heading compact"><div><p class="eyebrow">ACTIVE RECALL</p><h2>Flashcards</h2></div><span class="quiet-badge" id="flashcard-count"></span></div><div class="flashcard-stage" id="flashcard-stage"></div><div class="flashcard-controls"><button class="mini-button" id="previous-card" type="button">←</button><button class="mini-button primary" id="flip-card" type="button">Reveal answer</button><button class="mini-button" id="next-card" type="button">→</button></div></section>
-              <section class="ask-panel"><p class="eyebrow">ASK THE MATERIAL</p><h2>Grounded Q&amp;A</h2><p>Answers use only your upload and show the strongest source excerpts.</p><form id="ask-form"><input id="ask-input" maxlength="500" placeholder="What does the lecture say about…" required><button class="button button-primary" type="submit">Ask</button></form><div class="ask-result" id="ask-result" hidden></div></section>
+              <section class="ask-panel"><p class="eyebrow">ASK THE MATERIAL</p><h2>Grounded Q&amp;A</h2><p>Answers use only your upload and show the strongest source excerpts.</p><form id="ask-form"><input id="ask-input" maxlength="500" placeholder="What does the lecture say about…" required><button class="voice-button" id="voice-ask" type="button" aria-label="Start voice input" title="Start voice input">●</button><button class="button button-primary" type="submit">Ask</button></form><div class="ask-result" id="ask-result" hidden></div></section>
             </div>
             <section class="defense-panel">
               <div class="defense-copy"><p class="eyebrow">FEYNMAN DEFENSE</p><h2>Explain it without looking</h2><p>Write or dictate the topic in your own words. StudyCloud measures concept coverage, identifies omissions, and sends confident omissions into BlindSpot Detector.</p></div>
@@ -201,6 +202,7 @@
     <a href="#roadmap" data-route="roadmap"><span>⌁</span>Roadmap</a>
   </nav>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <script src="/static/i18n.js" defer></script>
   <script src="/static/app.js" defer></script>
 </body>
 </html>

@@ -1,8 +1,9 @@
-const CACHE_NAME = "studycloud-shell-v1";
+const CACHE_NAME = "studycloud-shell-v2";
 const SHELL = [
   "/",
   "/static/styles.css",
   "/static/app.js",
+  "/static/i18n.js",
   "/static/manifest.webmanifest",
   "/static/icon.svg"
 ];

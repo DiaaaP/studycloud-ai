@@ -2,8 +2,8 @@
 
 ## Implemented in 2.0
 
-- PDF, PPTX, DOCX, TXT, and Markdown ingestion up to 25 MB.
-- Source-aware extraction by page, slide, paragraph, table, or text section.
+- PDF, PPTX, DOCX, EPUB, HTML, CSV, SRT, VTT, TXT, and Markdown ingestion up to 25 MB.
+- Source-aware extraction by page, slide, paragraph, table, chapter, row, subtitle cue, or text section.
 - Summaries, key ideas, 5-7 quiz questions, and flashcards.
 - Grounded Q&A that returns evidence excerpts from the uploaded material.
 - Markdown study-pack export.
@@ -12,8 +12,11 @@
 - Feynman Defense: scores a learner's explanation against source-derived concepts and exposes confident omissions.
 - Adaptive review intervals with “Again” and “Got it” recall feedback.
 - Human-in-the-loop editing for generated study packs and live library search.
+- English, Russian, and Kazakh interface localization with persisted language selection.
+- Language-aware browser dictation for grounded questions and Feynman explanations.
+- Original-source access and safe lecture deletion with cascading study-history cleanup.
 - Installable PWA shell with network-first caching and offline navigation.
-- SQLite persistence, responsive UI, API documentation, 10 automated tests, Docker, and CI.
+- SQLite persistence, responsive UI, API documentation, 12 automated tests, Docker, and CI.
 - Optional Gemini generation with a local offline fallback.
 
 ## What still separates a local product from a production SaaS

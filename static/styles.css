@@ -47,6 +47,8 @@ a { color: inherit; text-decoration: none; }
 .eyebrow { margin: 0; color: var(--primary); font-size: 10px; font-weight: 800; letter-spacing: .13em; text-transform: uppercase; }
 .eyebrow.light { color: #dcd9ff; }
 .topbar-actions { display: flex; align-items: center; gap: 12px; }
+.language-picker { height: 38px; padding: 0 8px 0 11px; display: flex; align-items: center; gap: 6px; border: 1px solid var(--line); border-radius: 999px; background: white; color: var(--muted); font-size: 12px; font-weight: 800; }
+.language-picker select { border: 0; outline: 0; color: var(--ink); background: transparent; font: inherit; cursor: pointer; }
 .api-state { padding: 8px 11px; border-radius: 999px; background: #e8fbf3; color: var(--mint-ink); font-size: 11px; font-weight: 750; text-transform: uppercase; letter-spacing: .05em; }
 .api-state i { display: inline-block; width: 7px; height: 7px; margin-right: 6px; border-radius: 50%; background: #16b879; }
 .avatar { width: 42px; height: 42px; border: 0; border-radius: 50%; color: white; font-size: 12px; font-weight: 800; background: linear-gradient(135deg, #24294a, #6257f3); cursor: pointer; }
@@ -87,6 +89,7 @@ main { width: min(1180px, 100%); min-height: calc(100vh - 98px); padding: 42px c
 .lecture-actions { display: flex; gap: 8px; }
 .mini-button { min-height: 37px; padding: 0 13px; border: 1px solid #dfe1ee; border-radius: 10px; background: white; color: #32384a; font-weight: 700; font-size: 12px; cursor: pointer; }
 .mini-button.primary { border-color: transparent; background: var(--soft-indigo); color: var(--primary); }
+.mini-button.danger { width: 37px; padding: 0; color: #b33a4b; background: #fff3f4; border-color: #f7dadd; }
 
 .button { min-height: 46px; padding: 0 18px; display: inline-flex; align-items: center; justify-content: center; gap: 11px; border: 0; border-radius: 13px; font-weight: 750; font-size: 14px; cursor: pointer; transition: .2s ease; }
 .button:hover { transform: translateY(-1px); }
@@ -159,9 +162,14 @@ main { width: min(1180px, 100%); min-height: calc(100vh - 98px); padding: 42px c
 .flashcard-controls { margin-top: 12px; display: grid; grid-template-columns: 52px 1fr 52px; gap: 8px; }
 .ask-panel h2 { margin: 8px 0 7px; font-size: 25px; letter-spacing: -.035em; }
 .ask-panel > p:not(.eyebrow) { margin: 0 0 20px; color: var(--muted); line-height: 1.55; font-size: 13px; }
-.ask-panel form { display: grid; grid-template-columns: 1fr auto; gap: 9px; }
+.ask-panel form { display: grid; grid-template-columns: 1fr 46px auto; gap: 9px; }
 .ask-panel input { min-width: 0; height: 46px; padding: 0 13px; border: 1px solid #d7d9e7; border-radius: 12px; background: #fbfbff; outline: none; }
 .ask-panel input:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(79,70,229,.12); }
+.voice-button { width: 46px; height: 46px; border: 1px solid #d7d9e7; border-radius: 12px; color: var(--primary); background: #f6f5ff; cursor: pointer; font-size: 13px; transition: .2s ease; }
+.voice-button:hover { border-color: var(--primary); }
+.voice-button.listening, #voice-defense.listening { color: white; background: #e74b67; border-color: #e74b67; animation: voice-pulse 1.25s ease-in-out infinite; }
+.voice-button:disabled { opacity: .45; cursor: not-allowed; }
+@keyframes voice-pulse { 50% { box-shadow: 0 0 0 7px rgba(231,75,103,.13); } }
 .ask-result { margin-top: 16px; padding: 17px; border-radius: 14px; background: #f4f5fc; color: #30384c; font-size: 13px; line-height: 1.6; }
 .ask-result strong { display: block; margin-bottom: 6px; color: var(--ink); }
 .source-evidence { margin-top: 10px; padding-top: 10px; border-top: 1px solid #dde0eb; color: var(--muted); font-size: 11px; }
@@ -290,7 +298,8 @@ main { width: min(1180px, 100%); min-height: calc(100vh - 98px); padding: 42px c
   .proofloop-score { width: 145px; justify-self: start; }
   .radar-summary { grid-template-columns: 1fr; }
   .gap-card { grid-template-columns: 1fr; }
-  .ask-panel form { grid-template-columns: 1fr; }
+  .ask-panel form { grid-template-columns: 1fr 46px; }
+  .ask-panel form .button { grid-column: 1 / -1; }
   .bottom-nav a { font-size: 9px; }
   #confidence-options { grid-template-columns: repeat(2,1fr); }
   .defense-toolbar { grid-template-columns: 1fr; }

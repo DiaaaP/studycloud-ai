@@ -6,16 +6,18 @@ Its signature workflow combines **ProofLoop**, **BlindSpot Detector**, and **Fey
 
 ## Features
 
-- Upload PDF, PPTX, DOCX, TXT, and Markdown files up to 25 MB.
-- Extract source locations by page, slide, paragraph, table, or section.
+- Upload PDF, PPTX, DOCX, EPUB, HTML, CSV, SRT, VTT, TXT, and Markdown files up to 25 MB.
+- Extract source locations by page, slide, paragraph, table, chapter, row, cue, or section.
 - Generate summaries, five key ideas, flashcards, and 5-7 quiz questions.
 - Ask questions against one uploaded source and inspect supporting excerpts.
 - Explain a topic in your own words with Feynman Defense and measure concept coverage.
-- Optionally dictate an explanation with the browser's speech-recognition support.
+- Dictate source questions and Feynman explanations with browser speech recognition.
+- Switch the complete interface and recognition locale between English, Russian, and Kazakh.
 - Record confidence for every quiz answer and detect high-confidence mistakes.
 - Track quiz results, confidence traps, and knowledge health.
 - Repair weak concepts through ProofLoop reviews.
 - Search the local lecture library and edit generated summaries/key ideas before studying.
+- Open the original source, remove lectures from the library, and cascade their study history safely.
 - Export a complete study pack as Markdown.
 - Build a browser-local exam roadmap.
 - Install the responsive interface as a local-first PWA with an offline app shell.
@@ -92,14 +94,14 @@ python -m pip install pytest
 python -m pytest -q
 ```
 
-The 10-test suite covers ingestion, study-pack generation and editing, grounded Q&A, confidence-aware quiz scoring, BlindSpot Detector, Feynman Defense, ProofLoop updates, PWA assets, exports, and invalid files.
+The 12-test suite covers multi-format ingestion, study-pack generation and editing, grounded Q&A, confidence-aware quiz scoring, BlindSpot Detector, Feynman Defense, ProofLoop updates, multilingual/PWA assets, exports, and invalid files.
 
 ## Current limits
 
 - Scanned PDFs still need OCR.
 - The app stores data locally and does not yet have user accounts.
 - Browser roadmap data uses `localStorage`.
-- Speech recognition depends on browser support; typed Feynman explanations always work.
+- Speech recognition depends on browser support and may request microphone permission; typed questions and explanations always work.
 - The offline shell opens without a network, but AI/API operations still require the local FastAPI server.
 - “Unique” is a product direction, not a universal market claim. The differentiated workflow combines calibrated confidence, self-explanation, source evidence, and spaced recall in one loop.
 

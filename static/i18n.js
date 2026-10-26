@@ -1,0 +1,307 @@
+(() => {
+  const dictionaries = {
+    en: {},
+    ru: {
+      "Dashboard": "Главная",
+      "Upload lecture": "Загрузить материал",
+      "AI summary": "AI-конспект",
+      "Practice quiz": "Тренировочный тест",
+      "ProofLoop radar": "Радар ProofLoop",
+      "Exam roadmap": "План подготовки",
+      "Active workspace": "Активное пространство",
+      "My lectures": "Мои материалы",
+      "API ready": "API готов",
+      "Student profile": "Профиль студента",
+      "STUDYCLOUD WORKSPACE": "РАБОЧЕЕ ПРОСТРАНСТВО",
+      "Turn course files into knowledge you can prove.": "Превращайте учебные файлы в знания, которые можете подтвердить.",
+      "Upload notes or slides, study with source-backed summaries, and let ProofLoop find what you only think you know.": "Загружайте конспекты и слайды, учитесь по материалам с источниками, а ProofLoop найдёт то, что вы только считаете усвоенным.",
+      "Upload a lecture": "Загрузить материал",
+      "FOCUS MODE": "РЕЖИМ ФОКУСА",
+      "One lecture at a time": "По одному материалу за раз",
+      "Everything stays local unless you add a Gemini API key.": "Всё остаётся локально, пока вы не добавите ключ Gemini API.",
+      "WEEKLY MASTERY": "ПРОГРЕСС ОБУЧЕНИЯ",
+      "Your progress": "Ваш прогресс",
+      "Live data": "Живые данные",
+      "LIBRARY": "БИБЛИОТЕКА",
+      "Recent course materials": "Недавние материалы",
+      "Add PDF": "Добавить файл",
+      "Search your materials": "Поиск по материалам",
+      "Search course materials": "Поиск учебных материалов",
+      "SIGNATURE FEATURE": "КЛЮЧЕВАЯ ФУНКЦИЯ",
+      "ProofLoop closes the gap between a wrong answer and the source.": "ProofLoop связывает ошибку с местом в источнике.",
+      "Every mistake becomes a tracked knowledge debt with evidence, a review date, and a one-click recall check.": "Каждая ошибка становится отслеживаемым пробелом со ссылкой на источник, датой повторения и быстрой проверкой памяти.",
+      "Open knowledge radar": "Открыть радар знаний",
+      "STEP 1 OF 3": "ШАГ 1 ИЗ 3",
+      "Upload lecture material": "Загрузите учебный материал",
+      "Upload PDF, PowerPoint, Word, Markdown, HTML, EPUB, CSV, subtitles, or text files up to 25 MB. StudyCloud keeps source locations attached to every learning object.": "Загрузите PDF, PowerPoint, Word, Markdown, HTML, EPUB, CSV, субтитры или текст до 25 МБ. StudyCloud сохранит ссылки на источник для каждого учебного объекта.",
+      "Drop course material here or browse files": "Перетащите материал сюда или выберите файл",
+      "PDF · PPTX · DOCX · EPUB · HTML · CSV · SRT · VTT · TXT · MD · max 25 MB": "PDF · PPTX · DOCX · EPUB · HTML · CSV · SRT · VTT · TXT · MD · до 25 МБ",
+      "Process lecture": "Обработать материал",
+      "Building your study pack…": "Создаём учебный пакет…",
+      "Extracting text, summarizing ideas, and writing questions.": "Извлекаем текст, собираем идеи и создаём вопросы.",
+      "HOW IT WORKS": "КАК ЭТО РАБОТАЕТ",
+      "Extract": "Извлечение",
+      "Read pages, slides, paragraphs, chapters, rows, and sections.": "Читаем страницы, слайды, абзацы, главы, строки и разделы.",
+      "Synthesize": "Синтез",
+      "Create an evidence-backed summary and flashcards.": "Создаём конспект и карточки с подтверждениями.",
+      "Prove": "Проверка",
+      "Test recall and send mistakes into ProofLoop.": "Проверяем память и отправляем ошибки в ProofLoop.",
+      "Private by default": "Приватно по умолчанию",
+      "Your local files stay in this app's data folder.": "Ваши файлы остаются в локальной папке приложения.",
+      "No lecture selected": "Материал не выбран",
+      "Choose a lecture from the dashboard or upload a new file.": "Выберите материал на главной или загрузите новый файл.",
+      "Open library": "Открыть библиотеку",
+      "AI LECTURE SUMMARY": "AI-КОНСПЕКТ",
+      "Edit pack": "Редактировать",
+      "Open source": "Открыть источник",
+      "Export .md": "Экспорт .md",
+      "Start quiz": "Начать тест",
+      "HUMAN IN THE LOOP": "ЧЕЛОВЕК УПРАВЛЯЕТ РЕЗУЛЬТАТОМ",
+      "Edit generated material": "Редактировать материал",
+      "Cancel": "Отмена",
+      "Title": "Название",
+      "Summary": "Конспект",
+      "Key ideas, one per line": "Ключевые идеи, по одной в строке",
+      "Save study pack": "Сохранить пакет",
+      "EXECUTIVE SUMMARY": "КРАТКИЙ КОНСПЕКТ",
+      "KEY IDEAS": "КЛЮЧЕВЫЕ ИДЕИ",
+      "ACTIVE RECALL": "АКТИВНОЕ ВОСПОМИНАНИЕ",
+      "Flashcards": "Карточки",
+      "Reveal answer": "Показать ответ",
+      "ASK THE MATERIAL": "ВОПРОС К МАТЕРИАЛУ",
+      "Grounded Q&A": "Ответы по источнику",
+      "Answers use only your upload and show the strongest source excerpts.": "Ответы используют только загруженный материал и показывают лучшие фрагменты источника.",
+      "What does the lecture say about…": "Что в материале сказано о…",
+      "Start voice input": "Начать голосовой ввод",
+      "Ask": "Спросить",
+      "FEYNMAN DEFENSE": "ЗАЩИТА ФЕЙНМАНА",
+      "Explain it without looking": "Объясните без подсказки",
+      "Write or dictate the topic in your own words. StudyCloud measures concept coverage, identifies omissions, and sends confident omissions into BlindSpot Detector.": "Напишите или продиктуйте тему своими словами. StudyCloud измерит покрытие понятий, найдёт пропуски и отправит уверенные заблуждения в BlindSpot Detector.",
+      "Explain the topic as if you were teaching a class…": "Объясните тему так, будто преподаёте её группе…",
+      "Confidence": "Уверенность",
+      "Guessing · 25%": "Угадываю · 25%",
+      "Unsure · 50%": "Не уверен · 50%",
+      "Confident · 80%": "Уверен · 80%",
+      "Certain · 100%": "Полностью уверен · 100%",
+      "Evaluate explanation": "Оценить объяснение",
+      "No quiz selected": "Тест не выбран",
+      "Open a lecture summary first, then launch its quiz.": "Сначала откройте конспект материала, затем запустите тест.",
+      "Knowledge check": "Проверка знаний",
+      "How sure are you?": "Насколько вы уверены?",
+      "Previous": "Назад",
+      "← Previous": "← Назад",
+      "Next question": "Следующий вопрос",
+      "ADAPTIVE MEMORY ENGINE": "АДАПТИВНАЯ ПАМЯТЬ",
+      "ProofLoop knowledge radar": "Радар знаний ProofLoop",
+      "Wrong answers become knowledge debts. Each debt stays linked to the source and returns on a spaced review schedule until you can recall it.": "Ошибки превращаются в пробелы знаний. Каждый пробел связан с источником и возвращается по интервальному расписанию, пока вы его не освоите.",
+      "knowledge health": "здоровье знаний",
+      "EXAM PREPARATION": "ПОДГОТОВКА К ЭКЗАМЕНУ",
+      "Build a simple study roadmap": "Создайте план подготовки",
+      "Choose an exam date and StudyCloud will spread your lecture review across the available days.": "Выберите дату экзамена, и StudyCloud распределит повторение материалов по оставшимся дням.",
+      "Exam name": "Название экзамена",
+      "Final exam": "Итоговый экзамен",
+      "Exam date": "Дата экзамена",
+      "Create roadmap": "Создать план",
+      "Home": "Главная",
+      "Upload": "Загрузка",
+      "Quiz": "Тест",
+      "Radar": "Радар",
+      "Roadmap": "План"
+    },
+    kk: {
+      "Dashboard": "Басты бет",
+      "Upload lecture": "Материал жүктеу",
+      "AI summary": "AI-конспект",
+      "Practice quiz": "Жаттығу тесті",
+      "ProofLoop radar": "ProofLoop радары",
+      "Exam roadmap": "Дайындық жоспары",
+      "Active workspace": "Белсенді жұмыс кеңістігі",
+      "My lectures": "Менің материалдарым",
+      "API ready": "API дайын",
+      "Student profile": "Студент профилі",
+      "STUDYCLOUD WORKSPACE": "STUDYCLOUD ЖҰМЫС КЕҢІСТІГІ",
+      "Turn course files into knowledge you can prove.": "Курс файлдарын дәлелдей алатын білімге айналдырыңыз.",
+      "Upload notes or slides, study with source-backed summaries, and let ProofLoop find what you only think you know.": "Конспектілер мен слайдтарды жүктеңіз, дереккөзге негізделген материалмен оқыңыз, ProofLoop толық білмейтін тақырыптарды тапсын.",
+      "Upload a lecture": "Материал жүктеу",
+      "FOCUS MODE": "НАЗАР АУДАРУ РЕЖИМІ",
+      "One lecture at a time": "Бір уақытта бір материал",
+      "Everything stays local unless you add a Gemini API key.": "Gemini API кілтін қоспасаңыз, бәрі жергілікті сақталады.",
+      "WEEKLY MASTERY": "ОҚУ ҮЛГЕРІМІ",
+      "Your progress": "Сіздің прогресіңіз",
+      "Live data": "Нақты деректер",
+      "LIBRARY": "КІТАПХАНА",
+      "Recent course materials": "Соңғы оқу материалдары",
+      "Add PDF": "Файл қосу",
+      "Search your materials": "Материалдардан іздеу",
+      "Search course materials": "Оқу материалдарынан іздеу",
+      "SIGNATURE FEATURE": "НЕГІЗГІ МҮМКІНДІК",
+      "ProofLoop closes the gap between a wrong answer and the source.": "ProofLoop қатені дереккөздегі түсіндірмемен байланыстырады.",
+      "Every mistake becomes a tracked knowledge debt with evidence, a review date, and a one-click recall check.": "Әр қате дәлелі, қайталау күні және жылдам тексеруі бар білім олқылығына айналады.",
+      "Open knowledge radar": "Білім радарын ашу",
+      "STEP 1 OF 3": "3 ҚАДАМНЫҢ 1-І",
+      "Upload lecture material": "Оқу материалын жүктеңіз",
+      "Upload PDF, PowerPoint, Word, Markdown, HTML, EPUB, CSV, subtitles, or text files up to 25 MB. StudyCloud keeps source locations attached to every learning object.": "25 МБ-қа дейін PDF, PowerPoint, Word, Markdown, HTML, EPUB, CSV, субтитр немесе мәтін жүктеңіз. StudyCloud әр оқу нысанына дереккөз орнын тіркейді.",
+      "Drop course material here or browse files": "Материалды осында тастаңыз немесе файлды таңдаңыз",
+      "PDF · PPTX · DOCX · EPUB · HTML · CSV · SRT · VTT · TXT · MD · max 25 MB": "PDF · PPTX · DOCX · EPUB · HTML · CSV · SRT · VTT · TXT · MD · 25 МБ дейін",
+      "Process lecture": "Материалды өңдеу",
+      "Building your study pack…": "Оқу жинағы жасалуда…",
+      "Extracting text, summarizing ideas, and writing questions.": "Мәтінді шығарып, идеяларды жинақтап, сұрақтар дайындап жатырмыз.",
+      "HOW IT WORKS": "ҚАЛАЙ ЖҰМЫС ІСТЕЙДІ",
+      "Extract": "Мәтінді шығару",
+      "Read pages, slides, paragraphs, chapters, rows, and sections.": "Беттерді, слайдтарды, абзацтарды, тарауларды, жолдарды және бөлімдерді оқимыз.",
+      "Synthesize": "Жинақтау",
+      "Create an evidence-backed summary and flashcards.": "Дәлелді конспект пен карточкалар жасаймыз.",
+      "Prove": "Тексеру",
+      "Test recall and send mistakes into ProofLoop.": "Есте сақтауды тексеріп, қателерді ProofLoop-қа жібереміз.",
+      "Private by default": "Әдепкіде құпия",
+      "Your local files stay in this app's data folder.": "Жергілікті файлдарыңыз қолданбаның деректер бумасында қалады.",
+      "No lecture selected": "Материал таңдалмаған",
+      "Choose a lecture from the dashboard or upload a new file.": "Басты беттен материалды таңдаңыз немесе жаңа файл жүктеңіз.",
+      "Open library": "Кітапхананы ашу",
+      "AI LECTURE SUMMARY": "AI-КОНСПЕКТ",
+      "Edit pack": "Өңдеу",
+      "Open source": "Дереккөзді ашу",
+      "Export .md": ".md экспорттау",
+      "Start quiz": "Тестті бастау",
+      "HUMAN IN THE LOOP": "АДАМ БАҚЫЛАУЫНДА",
+      "Edit generated material": "Жасалған материалды өңдеу",
+      "Cancel": "Бас тарту",
+      "Title": "Атауы",
+      "Summary": "Конспект",
+      "Key ideas, one per line": "Негізгі идеялар, әр жолға біреу",
+      "Save study pack": "Оқу жинағын сақтау",
+      "EXECUTIVE SUMMARY": "ҚЫСҚАША КОНСПЕКТ",
+      "KEY IDEAS": "НЕГІЗГІ ИДЕЯЛАР",
+      "ACTIVE RECALL": "БЕЛСЕНДІ ЕСКЕ ТҮСІРУ",
+      "Flashcards": "Карточкалар",
+      "Reveal answer": "Жауапты көрсету",
+      "ASK THE MATERIAL": "МАТЕРИАЛҒА СҰРАҚ",
+      "Grounded Q&A": "Дереккөз бойынша жауап",
+      "Answers use only your upload and show the strongest source excerpts.": "Жауаптар тек жүктелген материалды пайдаланып, маңызды үзінділерді көрсетеді.",
+      "What does the lecture say about…": "Материалда ... туралы не айтылған?",
+      "Start voice input": "Дауыспен енгізуді бастау",
+      "Ask": "Сұрау",
+      "FEYNMAN DEFENSE": "ФЕЙНМАН ҚОРҒАУЫ",
+      "Explain it without looking": "Қарамай түсіндіріңіз",
+      "Write or dictate the topic in your own words. StudyCloud measures concept coverage, identifies omissions, and sends confident omissions into BlindSpot Detector.": "Тақырыпты өз сөзіңізбен жазыңыз немесе айтыңыз. StudyCloud ұғымдарды қамтуды өлшеп, сенімді қателерді BlindSpot Detector-ға жібереді.",
+      "Explain the topic as if you were teaching a class…": "Тақырыпты топқа сабақ беріп жатқандай түсіндіріңіз…",
+      "Confidence": "Сенімділік",
+      "Guessing · 25%": "Болжап тұрмын · 25%",
+      "Unsure · 50%": "Сенімсізбін · 50%",
+      "Confident · 80%": "Сенімдімін · 80%",
+      "Certain · 100%": "Толық сенімдімін · 100%",
+      "Evaluate explanation": "Түсіндірмені бағалау",
+      "No quiz selected": "Тест таңдалмаған",
+      "Open a lecture summary first, then launch its quiz.": "Алдымен материал конспектісін ашып, содан кейін тестті бастаңыз.",
+      "Knowledge check": "Білімді тексеру",
+      "How sure are you?": "Қаншалықты сенімдісіз?",
+      "Previous": "Артқа",
+      "← Previous": "← Артқа",
+      "Next question": "Келесі сұрақ",
+      "ADAPTIVE MEMORY ENGINE": "БЕЙІМДЕЛЕТІН ЖАД ЖҮЙЕСІ",
+      "ProofLoop knowledge radar": "ProofLoop білім радары",
+      "Wrong answers become knowledge debts. Each debt stays linked to the source and returns on a spaced review schedule until you can recall it.": "Қате жауаптар білім олқылығына айналады. Әр олқылық дереккөзбен байланысып, меңгергенге дейін аралық қайталау кестесімен қайтады.",
+      "knowledge health": "білім жағдайы",
+      "EXAM PREPARATION": "ЕМТИХАНҒА ДАЙЫНДЫҚ",
+      "Build a simple study roadmap": "Дайындық жоспарын жасаңыз",
+      "Choose an exam date and StudyCloud will spread your lecture review across the available days.": "Емтихан күнін таңдаңыз, StudyCloud материалдарды қалған күндерге бөліп береді.",
+      "Exam name": "Емтихан атауы",
+      "Final exam": "Қорытынды емтихан",
+      "Exam date": "Емтихан күні",
+      "Create roadmap": "Жоспар құру",
+      "Home": "Басты бет",
+      "Upload": "Жүктеу",
+      "Quiz": "Тест",
+      "Radar": "Радар",
+      "Roadmap": "Жоспар"
+    }
+  };
+
+  const dynamic = {
+    en: {
+      your_study_workspace: "Your study workspace", add_course_material: "Add course material", review_essentials: "Review the essentials", test_recall: "Test your recall", repair_knowledge: "Repair weak knowledge", plan_session: "Plan the next session",
+      materials: "Materials", words_analyzed: "Words analyzed", quizzes: "Quizzes", accuracy: "Accuracy", knowledge_debts: "Knowledge debts", blind: "blind",
+      study_pack: "Study pack", practice_quiz: "Practice quiz", delete: "Delete", library_empty: "Your library is empty", upload_first: "Upload your first course file to begin.",
+      words: "words", page: "page", pages: "pages", slide: "slide", slides: "slides", section: "section", sections: "sections", chapter: "chapter", chapters: "chapters",
+      generated_with: "Generated with {engine}. Important claims remain traceable to the uploaded source.", no_cards: "No flashcards", not_enough_concepts: "This material did not provide enough distinct concepts.", answer: "Answer", source: "Source", recall_before: "Recall before revealing", show_prompt: "Show prompt", reveal_answer: "Reveal answer",
+      searching: "Searching the source…", answer_material: "Answer from your material", listening: "Listening… Click to stop", start_voice: "Start voice input", stop_voice: "Stop recording", voice_unavailable: "Voice input unavailable", voice_stopped: "Voice input stopped: {error}",
+      evaluating: "Evaluating concept coverage…", coverage: "concept coverage at {confidence}% confidence", confidence_trap_one: "1 confidence trap detected.", confidence_trap_many: "{count} confidence traps detected.", omissions_added: " These omissions were added to ProofLoop with extra priority.", next_prompt: "Next prompt",
+      question_of: "Question {current} of {total}", key_concept: "key concept", evidence: "Evidence", no_new_debts: "No new knowledge debts. Your review intervals increased.", debts_added: "{count} knowledge debts were added to ProofLoop.", blind_found: " BlindSpot Detector found {count} high-confidence mistakes.", open_proofloop: "Open ProofLoop", finish_quiz: "Finish quiz", next_question: "Next question →", choose_answer: "Choose an answer before continuing.", rate_confidence: "Rate your confidence before continuing.", quiz_complete: "Quiz complete: {score} / {total}",
+      active_debts: "Active knowledge debts", confidence_traps: "Confidence traps", due_review: "Due for review", concepts_tracked: "Concepts tracked", confidence_trap: "Confidence trap · {confidence}% sure", mistakes_recalls: "Mistakes {mistakes} · successful recalls {successes}", mastery_review: "{mastery}% mastery · review {date}", again: "Again", got_it: "Got it", radar_clear: "Your radar is clear", complete_quiz: "Complete a quiz and ProofLoop will map weak concepts here.", choose_material: "Choose material", recall_logged: "Recall logged. The next interval is longer.", tomorrow: "Scheduled again for tomorrow.",
+      invalid_type: "Choose PDF, PPTX, DOCX, TXT, MD, HTML, EPUB, CSV, SRT, or VTT.", too_large: "The file is larger than 25 MB.", pack_created: "Evidence-backed study pack created.", pack_updated: "Study pack updated.", lecture_deleted: "Lecture deleted.", delete_confirm: "Delete this lecture and all related study progress?", future_date: "Choose a future exam date.", roadmap_saved: "Roadmap saved in this browser.", next_sessions: "Your next sessions", days_left: "days left", final_mixed: "Final mixed quiz", weak_concepts: "ProofLoop weak concepts", flashcard_recall: "Flashcard recall", summary_quiz: "Summary + practice quiz", upload_first_lecture: "Upload your first lecture"
+    },
+    ru: {
+      your_study_workspace: "Ваше учебное пространство", add_course_material: "Добавить учебный материал", review_essentials: "Повторить главное", test_recall: "Проверить память", repair_knowledge: "Устранить пробелы", plan_session: "Спланировать занятия",
+      materials: "Материалы", words_analyzed: "Слов проанализировано", quizzes: "Тесты", accuracy: "Точность", knowledge_debts: "Пробелы знаний", blind: "слепых зон",
+      study_pack: "Конспект", practice_quiz: "Пройти тест", delete: "Удалить", library_empty: "Библиотека пуста", upload_first: "Загрузите первый учебный файл, чтобы начать.",
+      words: "слов", page: "страница", pages: "страниц", slide: "слайд", slides: "слайдов", section: "раздел", sections: "разделов", chapter: "глава", chapters: "глав",
+      generated_with: "Создано с помощью {engine}. Важные утверждения можно проверить по загруженному источнику.", no_cards: "Нет карточек", not_enough_concepts: "В материале недостаточно отдельных понятий.", answer: "Ответ", source: "Источник", recall_before: "Вспомните до открытия", show_prompt: "Показать вопрос", reveal_answer: "Показать ответ",
+      searching: "Ищем в источнике…", answer_material: "Ответ по вашему материалу", listening: "Слушаю… Нажмите, чтобы остановить", start_voice: "Начать голосовой ввод", stop_voice: "Остановить запись", voice_unavailable: "Голосовой ввод недоступен", voice_stopped: "Голосовой ввод остановлен: {error}",
+      evaluating: "Оцениваем покрытие понятий…", coverage: "покрытие понятий при уверенности {confidence}%", confidence_trap_one: "Обнаружена 1 ловушка уверенности.", confidence_trap_many: "Обнаружено ловушек уверенности: {count}.", omissions_added: " Эти пропуски добавлены в ProofLoop с повышенным приоритетом.", next_prompt: "Следующий вопрос",
+      question_of: "Вопрос {current} из {total}", key_concept: "ключевое понятие", evidence: "Источник", no_new_debts: "Новых пробелов нет. Интервалы повторения увеличены.", debts_added: "Добавлено пробелов в ProofLoop: {count}.", blind_found: " BlindSpot Detector нашёл уверенных ошибок: {count}.", open_proofloop: "Открыть ProofLoop", finish_quiz: "Завершить тест", next_question: "Следующий вопрос →", choose_answer: "Выберите ответ перед продолжением.", rate_confidence: "Укажите уверенность перед продолжением.", quiz_complete: "Тест завершён: {score} / {total}",
+      active_debts: "Активные пробелы", confidence_traps: "Ловушки уверенности", due_review: "Пора повторить", concepts_tracked: "Понятий отслеживается", confidence_trap: "Ловушка уверенности · уверенность {confidence}%", mistakes_recalls: "Ошибки {mistakes} · успешные повторы {successes}", mastery_review: "Освоено {mastery}% · повтор {date}", again: "Повторить", got_it: "Знаю", radar_clear: "Радар чист", complete_quiz: "Пройдите тест, и ProofLoop покажет слабые понятия.", choose_material: "Выбрать материал", recall_logged: "Ответ сохранён. Следующий интервал стал длиннее.", tomorrow: "Повтор назначен на завтра.",
+      invalid_type: "Выберите PDF, PPTX, DOCX, TXT, MD, HTML, EPUB, CSV, SRT или VTT.", too_large: "Файл больше 25 МБ.", pack_created: "Учебный пакет с источниками создан.", pack_updated: "Учебный пакет обновлён.", lecture_deleted: "Материал удалён.", delete_confirm: "Удалить этот материал и всю связанную статистику?", future_date: "Выберите будущую дату экзамена.", roadmap_saved: "План сохранён в этом браузере.", next_sessions: "Следующие занятия", days_left: "дней осталось", final_mixed: "Итоговый смешанный тест", weak_concepts: "Слабые понятия ProofLoop", flashcard_recall: "Повтор карточек", summary_quiz: "Конспект + тест", upload_first_lecture: "Загрузите первый материал"
+    },
+    kk: {
+      your_study_workspace: "Сіздің оқу кеңістігіңіз", add_course_material: "Оқу материалын қосу", review_essentials: "Негізгіні қайталау", test_recall: "Есте сақтауды тексеру", repair_knowledge: "Білім олқылығын түзету", plan_session: "Оқуды жоспарлау",
+      materials: "Материалдар", words_analyzed: "Талданған сөздер", quizzes: "Тесттер", accuracy: "Дәлдік", knowledge_debts: "Білім олқылықтары", blind: "жасырын олқылық",
+      study_pack: "Конспект", practice_quiz: "Тест өту", delete: "Жою", library_empty: "Кітапхана бос", upload_first: "Бастау үшін алғашқы оқу файлын жүктеңіз.",
+      words: "сөз", page: "бет", pages: "бет", slide: "слайд", slides: "слайд", section: "бөлім", sections: "бөлім", chapter: "тарау", chapters: "тарау",
+      generated_with: "{engine} көмегімен жасалды. Маңызды тұжырымдарды жүктелген дереккөзден тексеруге болады.", no_cards: "Карточкалар жоқ", not_enough_concepts: "Материалда бөлек ұғымдар жеткіліксіз.", answer: "Жауап", source: "Дереккөз", recall_before: "Ашпас бұрын еске түсіріңіз", show_prompt: "Сұрақты көрсету", reveal_answer: "Жауапты көрсету",
+      searching: "Дереккөзден іздеп жатырмыз…", answer_material: "Материалыңыз бойынша жауап", listening: "Тыңдап тұрмын… Тоқтату үшін басыңыз", start_voice: "Дауыспен енгізуді бастау", stop_voice: "Жазуды тоқтату", voice_unavailable: "Дауыспен енгізу қолжетімсіз", voice_stopped: "Дауыспен енгізу тоқтады: {error}",
+      evaluating: "Ұғымдардың қамтылуын бағалап жатырмыз…", coverage: "{confidence}% сенімділіктегі ұғымдар қамтылуы", confidence_trap_one: "1 сенімділік қатесі табылды.", confidence_trap_many: "Сенімділік қатесі табылды: {count}.", omissions_added: " Бұл олқылықтар ProofLoop-қа жоғары басымдықпен қосылды.", next_prompt: "Келесі сұрақ",
+      question_of: "{total} сұрақтың {current}-і", key_concept: "негізгі ұғым", evidence: "Дереккөз", no_new_debts: "Жаңа олқылық жоқ. Қайталау аралығы ұлғайтылды.", debts_added: "ProofLoop-қа {count} олқылық қосылды.", blind_found: " BlindSpot Detector {count} сенімді қатені тапты.", open_proofloop: "ProofLoop ашу", finish_quiz: "Тестті аяқтау", next_question: "Келесі сұрақ →", choose_answer: "Жалғастыру алдында жауапты таңдаңыз.", rate_confidence: "Жалғастыру алдында сенімділікті белгілеңіз.", quiz_complete: "Тест аяқталды: {score} / {total}",
+      active_debts: "Белсенді олқылықтар", confidence_traps: "Сенімділік қателері", due_review: "Қайталау керек", concepts_tracked: "Бақыланатын ұғымдар", confidence_trap: "Сенімділік қатесі · {confidence}% сенімді", mistakes_recalls: "Қателер {mistakes} · сәтті қайталау {successes}", mastery_review: "Меңгерілді {mastery}% · қайталау {date}", again: "Қайтадан", got_it: "Білемін", radar_clear: "Радар таза", complete_quiz: "Тесттен өтіңіз, ProofLoop әлсіз ұғымдарды көрсетеді.", choose_material: "Материал таңдау", recall_logged: "Жауап сақталды. Келесі аралық ұзартылды.", tomorrow: "Қайталау ертеңге жоспарланды.",
+      invalid_type: "PDF, PPTX, DOCX, TXT, MD, HTML, EPUB, CSV, SRT немесе VTT таңдаңыз.", too_large: "Файл 25 МБ-тан үлкен.", pack_created: "Дереккөздері бар оқу жинағы жасалды.", pack_updated: "Оқу жинағы жаңартылды.", lecture_deleted: "Материал жойылды.", delete_confirm: "Бұл материалды және оған қатысты статистиканы жою керек пе?", future_date: "Болашақ емтихан күнін таңдаңыз.", roadmap_saved: "Жоспар осы браузерде сақталды.", next_sessions: "Келесі сабақтар", days_left: "күн қалды", final_mixed: "Қорытынды аралас тест", weak_concepts: "ProofLoop әлсіз ұғымдары", flashcard_recall: "Карточкаларды қайталау", summary_quiz: "Конспект + тест", upload_first_lecture: "Алғашқы материалды жүктеңіз"
+    }
+  };
+
+  let language = localStorage.getItem("studycloud-language") || ((navigator.language || "en").toLowerCase().startsWith("ru") ? "ru" : (navigator.language || "en").toLowerCase().startsWith("kk") ? "kk" : "en");
+  if (!dictionaries[language]) language = "en";
+  const bindings = [];
+
+  function interpolate(value, variables = {}) {
+    return String(value).replace(/\{(\w+)\}/g, (_, key) => variables[key] ?? `{${key}}`);
+  }
+
+  function t(key, variables = {}) {
+    const value = dynamic[language]?.[key] ?? dictionaries[language]?.[key] ?? key;
+    return interpolate(value, variables);
+  }
+
+  function capture(root = document.body) {
+    if (bindings.length) return;
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    while (walker.nextNode()) {
+      const node = walker.currentNode;
+      const original = node.nodeValue.trim();
+      if (original && (dictionaries.ru[original] || dictionaries.kk[original])) bindings.push({ node, original, type: "text" });
+    }
+    root.querySelectorAll("[placeholder], [aria-label], [title]").forEach(element => {
+      ["placeholder", "aria-label", "title"].forEach(attribute => {
+        const original = element.getAttribute(attribute);
+        if (original && (dictionaries.ru[original] || dictionaries.kk[original])) bindings.push({ element, attribute, original, type: "attribute" });
+      });
+    });
+  }
+
+  function apply(nextLanguage = language) {
+    language = dictionaries[nextLanguage] ? nextLanguage : "en";
+    localStorage.setItem("studycloud-language", language);
+    document.documentElement.lang = language;
+    capture();
+    bindings.forEach(binding => {
+      const translated = dictionaries[language]?.[binding.original] || binding.original;
+      if (binding.type === "text") {
+        const prefix = binding.node.nodeValue.match(/^\s*/)?.[0] || "";
+        const suffix = binding.node.nodeValue.match(/\s*$/)?.[0] || "";
+        binding.node.nodeValue = `${prefix}${translated}${suffix}`;
+      } else {
+        binding.element.setAttribute(binding.attribute, translated);
+      }
+    });
+    window.dispatchEvent(new CustomEvent("studycloud:language", { detail: { language } }));
+  }
+
+  window.StudyCloudI18n = { t, apply, get language() { return language; }, speechLocale: () => ({ en: "en-US", ru: "ru-RU", kk: "kk-KZ" }[language]) };
+})();

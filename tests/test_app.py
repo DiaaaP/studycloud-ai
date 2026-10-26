@@ -1,6 +1,7 @@
 import io
 import os
 import tempfile
+import zipfile
 
 os.environ["STUDYCLOUD_DATA_DIR"] = tempfile.mkdtemp(prefix="studycloud-tests-")
 os.environ["STUDYCLOUD_SEED_DEMO"] = "1"
@@ -41,6 +42,39 @@ def test_txt_upload_builds_full_study_pack():
         assert len(lecture["quiz"]) >= 5
         assert len(lecture["flashcards"]) >= 3
         assert lecture["source_chunks"][0]["ref"].startswith("Section")
+
+
+def test_html_and_csv_uploads_keep_source_locations():
+    html = b"""<!doctype html><html><body><h1>Cell biology</h1><p>Cells contain organelles with specialized functions and membranes regulate transport.</p><p>Mitochondria generate ATP while ribosomes synthesize proteins from messenger RNA instructions.</p></body></html>"""
+    csv_data = b"concept,definition\nNeuron,A specialized cell that transmits electrical and chemical signals through the nervous system\nSynapse,A junction where one neuron communicates with another cell using neurotransmitters\nMyelin,An insulating layer that increases the speed of signal transmission along an axon\n"
+    with TestClient(app) as client:
+        html_response = client.post("/api/lectures", files={"file": ("biology.html", html, "text/html")})
+        assert html_response.status_code == 201
+        assert html_response.json()["file_type"] == "HTML"
+        assert html_response.json()["source_chunks"][0]["ref"].startswith("Section")
+
+        csv_response = client.post("/api/lectures", files={"file": ("neuroscience.csv", csv_data, "text/csv")})
+        assert csv_response.status_code == 201
+        assert csv_response.json()["file_type"] == "CSV"
+        assert csv_response.json()["source_chunks"][0]["ref"].startswith("Row")
+
+
+def test_epub_upload_extracts_chapters():
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as archive:
+        archive.writestr("mimetype", "application/epub+zip")
+        archive.writestr(
+            "OEBPS/chapter1.xhtml",
+            "<html><body><h1>Distributed systems</h1><p>A consensus protocol coordinates independent nodes despite delays and failures.</p><p>Quorum decisions prevent isolated minorities from committing conflicting state transitions.</p></body></html>",
+        )
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/lectures",
+            files={"file": ("consensus.epub", buffer.getvalue(), "application/epub+zip")},
+        )
+        assert response.status_code == 201
+        assert response.json()["file_type"] == "EPUB"
+        assert response.json()["source_chunks"][0]["ref"] == "Chapter 1"
 
 
 def test_grounded_question_returns_sources():
@@ -117,6 +151,11 @@ def test_study_pack_can_be_edited():
 def test_pwa_assets_are_available():
     with TestClient(app) as client:
         assert client.get("/static/manifest.webmanifest").status_code == 200
+        assert client.get("/static/i18n.js").status_code == 200
+        shell = client.get("/").text
+        assert 'id="language-select"' in shell
+        assert 'id="voice-ask"' in shell
+        assert 'id="voice-defense"' in shell
         service_worker = client.get("/sw.js")
         assert service_worker.status_code == 200
         assert service_worker.headers["service-worker-allowed"] == "/"

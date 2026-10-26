@@ -9,20 +9,24 @@ const state = {
   quizResult: null,
   flashcardIndex: 0,
   flashcardRevealed: false,
+  activeRecognition: null,
+  voiceTarget: null,
 };
 
 const routes = {
-  dashboard: ["Your study workspace", "Dashboard"],
-  upload: ["Add course material", "Upload lecture"],
-  summary: ["Review the essentials", "AI summary"],
-  quiz: ["Test your recall", "Practice quiz"],
-  proofloop: ["Repair weak knowledge", "ProofLoop radar"],
-  roadmap: ["Plan the next session", "Exam roadmap"],
+  dashboard: ["your_study_workspace", "Dashboard"],
+  upload: ["add_course_material", "Upload lecture"],
+  summary: ["review_essentials", "AI summary"],
+  quiz: ["test_recall", "Practice quiz"],
+  proofloop: ["repair_knowledge", "ProofLoop radar"],
+  roadmap: ["plan_session", "Exam roadmap"],
 };
 
-const supportedExtensions = ["pdf", "pptx", "docx", "txt", "md"];
+const supportedExtensions = ["pdf", "pptx", "docx", "txt", "md", "html", "htm", "epub", "csv", "srt", "vtt"];
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
+const i18n = window.StudyCloudI18n;
+const t = (key, variables) => i18n.t(key, variables);
 const escapeHtml = (value = "") => String(value).replace(/[&<>'"]/g, character => ({
   "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;",
 }[character]));
@@ -31,7 +35,7 @@ async function api(path, options = {}) {
   const response = await fetch(`/api${path}`, { cache: "no-store", ...options });
   if (response.status === 204) return null;
   const body = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(body.detail || "Something went wrong");
+  if (!response.ok) throw new Error(t(body.detail || "Something went wrong"));
   return body;
 }
 
@@ -48,9 +52,9 @@ function route() {
   const current = routes[name] ? name : "dashboard";
   $$(".view").forEach(view => { view.hidden = view.dataset.view !== current; });
   $$('[data-route]').forEach(link => link.classList.toggle("active", link.dataset.route === current));
-  $("#page-eyebrow").textContent = routes[current][0];
-  $("#page-title").textContent = routes[current][1];
-  document.title = `${routes[current][1]} · StudyCloud AI`;
+  $("#page-eyebrow").textContent = t(routes[current][0]);
+  $("#page-title").textContent = t(routes[current][1]);
+  document.title = `${t(routes[current][1])} · StudyCloud AI`;
   if (current === "summary") renderSummary();
   if (current === "quiz") renderQuiz();
   if (current === "proofloop") renderProofLoop();
@@ -59,13 +63,14 @@ function route() {
 }
 
 function formatNumber(value) {
-  return new Intl.NumberFormat().format(value || 0);
+  return new Intl.NumberFormat(i18n.language).format(value || 0);
 }
 
 function unitLabel(lecture) {
-  if (lecture.file_type === "PPTX") return lecture.pages === 1 ? "slide" : "slides";
-  if (lecture.file_type === "PDF") return lecture.pages === 1 ? "page" : "pages";
-  return lecture.pages === 1 ? "section" : "sections";
+  if (lecture.file_type === "PPTX") return t(lecture.pages === 1 ? "slide" : "slides");
+  if (lecture.file_type === "PDF") return t(lecture.pages === 1 ? "page" : "pages");
+  if (lecture.file_type === "EPUB") return t(lecture.pages === 1 ? "chapter" : "chapters");
+  return t(lecture.pages === 1 ? "section" : "sections");
 }
 
 async function refreshDashboard() {
@@ -73,11 +78,11 @@ async function refreshDashboard() {
   state.lectures = lectures;
   state.radar = radar;
   $("#metrics").innerHTML = [
-    ["Materials", stats.lectures, "▤"],
-    ["Words analyzed", formatNumber(stats.words), "Aa"],
-    ["Quizzes", stats.quizzes, "?"],
-    ["Accuracy", `${stats.accuracy}%`, "◎"],
-    ["Knowledge debts", stats.blind_spots ? `${stats.open_gaps} · ${stats.blind_spots} blind` : stats.open_gaps, "◉"],
+    [t("materials"), stats.lectures, "▤"],
+    [t("words_analyzed"), formatNumber(stats.words), "Aa"],
+    [t("quizzes"), stats.quizzes, "?"],
+    [t("accuracy"), `${stats.accuracy}%`, "◎"],
+    [t("knowledge_debts"), stats.blind_spots ? `${stats.open_gaps} · ${stats.blind_spots} ${t("blind")}` : stats.open_gaps, "◉"],
   ].map(([label, value, icon]) => `<article class="metric"><i>${icon}</i><span>${label}</span><strong>${value}</strong></article>`).join("");
 
   renderLectureList(lectures);
@@ -87,15 +92,28 @@ function renderLectureList(lectures) {
   $("#lecture-list").innerHTML = lectures.length ? lectures.map(lecture => `
     <article class="lecture-row">
       <div class="lecture-icon">${escapeHtml(lecture.file_type || "FILE")}</div>
-      <div class="lecture-info"><h3>${escapeHtml(lecture.title)}</h3><p>${lecture.pages} ${unitLabel(lecture)} · ${formatNumber(lecture.word_count)} words · ${escapeHtml(lecture.engine)}</p></div>
+      <div class="lecture-info"><h3>${escapeHtml(lecture.title)}</h3><p>${lecture.pages} ${unitLabel(lecture)} · ${formatNumber(lecture.word_count)} ${t("words")} · ${escapeHtml(lecture.engine)}</p></div>
       <div class="lecture-actions">
-        <button class="mini-button primary" data-summary="${lecture.id}">Study pack</button>
-        <button class="mini-button" data-quiz="${lecture.id}">Practice quiz</button>
+        <button class="mini-button primary" data-summary="${lecture.id}">${t("study_pack")}</button>
+        <button class="mini-button" data-quiz="${lecture.id}">${t("practice_quiz")}</button>
+        <button class="mini-button danger" data-delete="${lecture.id}" aria-label="${t("delete")}" title="${t("delete")}">×</button>
       </div>
-    </article>`).join("") : `<div class="empty-state"><span>⇧</span><h2>Your library is empty</h2><p>Upload your first course file to begin.</p></div>`;
+    </article>`).join("") : `<div class="empty-state"><span>⇧</span><h2>${t("library_empty")}</h2><p>${t("upload_first")}</p></div>`;
 
   $$('[data-summary]').forEach(button => button.addEventListener("click", () => openLecture(button.dataset.summary, "summary")));
   $$('[data-quiz]').forEach(button => button.addEventListener("click", () => openLecture(button.dataset.quiz, "quiz")));
+  $$('[data-delete]').forEach(button => button.addEventListener("click", async () => {
+    if (!window.confirm(t("delete_confirm"))) return;
+    try {
+      await api(`/lectures/${button.dataset.delete}`, { method: "DELETE" });
+      if (state.activeLecture?.id === button.dataset.delete) state.activeLecture = null;
+      localStorage.removeItem(`studycloud-quiz-${button.dataset.delete}`);
+      await refreshDashboard();
+      toast(t("lecture_deleted"));
+    } catch (error) {
+      toast(error.message);
+    }
+  }));
 }
 
 $("#library-search").addEventListener("input", event => {
@@ -133,11 +151,12 @@ function renderSummary() {
   $("#summary-content").hidden = !lecture;
   if (!lecture) return;
   $("#summary-title").textContent = lecture.title;
-  $("#summary-meta").innerHTML = `<span>${escapeHtml(lecture.file_type)} · ${lecture.pages} ${unitLabel(lecture)}</span><span>${formatNumber(lecture.word_count)} words</span><span>${escapeHtml(lecture.engine)}</span>`;
+  $("#summary-meta").innerHTML = `<span>${escapeHtml(lecture.file_type)} · ${lecture.pages} ${unitLabel(lecture)}</span><span>${formatNumber(lecture.word_count)} ${t("words")}</span><span>${escapeHtml(lecture.engine)}</span>`;
   $("#summary-text").textContent = lecture.summary;
-  $("#engine-note").textContent = `Generated with ${lecture.engine}. Important claims remain traceable to the uploaded source.`;
+  $("#engine-note").textContent = t("generated_with", { engine: lecture.engine });
   $("#key-ideas").innerHTML = lecture.key_ideas.map(idea => `<li>${escapeHtml(idea)}</li>`).join("");
   $("#export-link").href = `/api/lectures/${lecture.id}/export`;
+  $("#source-link").href = `/api/lectures/${lecture.id}/source`;
   $("#edit-title").value = lecture.title;
   $("#edit-summary").value = lecture.summary;
   $("#edit-ideas").value = lecture.key_ideas.join("\n");
@@ -172,7 +191,7 @@ $("#edit-pack-form").addEventListener("submit", async event => {
     $("#edit-pack-form").hidden = true;
     await refreshDashboard();
     renderSummary();
-    toast("Study pack updated.");
+    toast(t("pack_updated"));
   } catch (error) {
     toast(error.message);
   }
@@ -181,16 +200,16 @@ $("#edit-pack-form").addEventListener("submit", async event => {
 function renderFlashcard() {
   const cards = state.activeLecture?.flashcards || [];
   const stage = $("#flashcard-stage");
-  $("#flashcard-count").textContent = cards.length ? `${state.flashcardIndex + 1} / ${cards.length}` : "0 cards";
+  $("#flashcard-count").textContent = cards.length ? `${state.flashcardIndex + 1} / ${cards.length}` : t("no_cards");
   if (!cards.length) {
-    stage.innerHTML = "<strong>No flashcards</strong><p>This material did not provide enough distinct concepts.</p>";
+    stage.innerHTML = `<strong>${t("no_cards")}</strong><p>${t("not_enough_concepts")}</p>`;
     return;
   }
   const card = cards[state.flashcardIndex];
   stage.innerHTML = state.flashcardRevealed
-    ? `<span>Answer · ${escapeHtml(card.source_ref || "Source")}</span><p>${escapeHtml(card.back)}</p>`
-    : `<span>Recall before revealing</span><strong>${escapeHtml(card.front)}</strong>`;
-  $("#flip-card").textContent = state.flashcardRevealed ? "Show prompt" : "Reveal answer";
+    ? `<span>${t("answer")} · ${escapeHtml(card.source_ref || t("source"))}</span><p>${escapeHtml(card.back)}</p>`
+    : `<span>${t("recall_before")}</span><strong>${escapeHtml(card.front)}</strong>`;
+  $("#flip-card").textContent = state.flashcardRevealed ? t("show_prompt") : t("reveal_answer");
 }
 
 $("#flip-card").addEventListener("click", () => { state.flashcardRevealed = !state.flashcardRevealed; renderFlashcard(); });
@@ -216,7 +235,7 @@ $("#ask-form").addEventListener("submit", async event => {
   const question = $("#ask-input").value.trim();
   const result = $("#ask-result");
   result.hidden = false;
-  result.innerHTML = "Searching the source…";
+  result.innerHTML = t("searching");
   try {
     const response = await api(`/lectures/${state.activeLecture.id}/ask`, {
       method: "POST",
@@ -224,46 +243,74 @@ $("#ask-form").addEventListener("submit", async event => {
       body: JSON.stringify({ question }),
     });
     const evidence = response.sources.map(source => `<div class="source-evidence"><strong>${escapeHtml(source.ref)}</strong>${escapeHtml(source.text)}</div>`).join("");
-    result.innerHTML = `<strong>Answer from your material</strong>${escapeHtml(response.answer)}${evidence}`;
+    result.innerHTML = `<strong>${t("answer_material")}</strong>${escapeHtml(response.answer)}${evidence}`;
   } catch (error) {
     result.textContent = error.message;
   }
 });
 
 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-const voiceDefenseButton = $("#voice-defense");
-if (!SpeechRecognition) {
-  voiceDefenseButton.disabled = true;
-  voiceDefenseButton.textContent = "Dictation unavailable";
+const voiceButtons = [$("#voice-ask"), $("#voice-defense")];
+
+function syncVoiceButtons() {
+  voiceButtons.forEach(button => {
+    if (!button) return;
+    const listening = state.voiceTarget === button.id;
+    button.disabled = !SpeechRecognition;
+    button.classList.toggle("listening", listening);
+    const label = !SpeechRecognition ? t("voice_unavailable") : listening ? t("listening") : t("start_voice");
+    button.setAttribute("aria-label", label);
+    button.setAttribute("title", label);
+    button.textContent = button.id === "voice-ask" ? (listening ? "■" : "●") : label;
+  });
 }
 
-voiceDefenseButton.addEventListener("click", () => {
-  if (!SpeechRecognition) return;
-  const recognition = new SpeechRecognition();
-  recognition.lang = navigator.language || "en-US";
-  recognition.interimResults = false;
-  recognition.continuous = true;
-  voiceDefenseButton.disabled = true;
-  voiceDefenseButton.textContent = "Listening…";
-  recognition.onresult = event => {
-    const transcript = [...event.results].map(result => result[0].transcript).join(" ");
-    const input = $("#defense-input");
-    input.value = `${input.value} ${transcript}`.trim();
-  };
-  recognition.onerror = event => toast(`Dictation stopped: ${event.error}`);
-  recognition.onend = () => {
-    voiceDefenseButton.disabled = false;
-    voiceDefenseButton.textContent = "Start dictation";
-  };
-  recognition.start();
-});
+function setupVoiceInput(buttonId, inputId) {
+  const button = $(`#${buttonId}`);
+  const input = $(`#${inputId}`);
+  button.addEventListener("click", () => {
+    if (!SpeechRecognition) return;
+    if (state.activeRecognition) {
+      state.activeRecognition.stop();
+      return;
+    }
+    const recognition = new SpeechRecognition();
+    const existing = input.value.trim();
+    recognition.lang = i18n.speechLocale();
+    recognition.interimResults = true;
+    recognition.continuous = true;
+    state.activeRecognition = recognition;
+    state.voiceTarget = buttonId;
+    syncVoiceButtons();
+    recognition.onresult = event => {
+      const transcript = [...event.results].map(result => result[0].transcript).join(" ").trim();
+      input.value = `${existing}${existing && transcript ? " " : ""}${transcript}`;
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    };
+    recognition.onerror = event => {
+      if (event.error !== "aborted") toast(t("voice_stopped", { error: event.error }));
+    };
+    recognition.onend = () => {
+      if (state.activeRecognition === recognition) {
+        state.activeRecognition = null;
+        state.voiceTarget = null;
+        syncVoiceButtons();
+      }
+    };
+    recognition.start();
+  });
+}
+
+setupVoiceInput("voice-ask", "ask-input");
+setupVoiceInput("voice-defense", "defense-input");
+syncVoiceButtons();
 
 $("#defense-form").addEventListener("submit", async event => {
   event.preventDefault();
   if (!state.activeLecture) return;
   const result = $("#defense-result");
   result.hidden = false;
-  result.innerHTML = "Evaluating concept coverage…";
+  result.innerHTML = t("evaluating");
   try {
     const response = await api(`/lectures/${state.activeLecture.id}/defend`, {
       method: "POST",
@@ -276,10 +323,10 @@ $("#defense-form").addEventListener("submit", async event => {
     const covered = response.covered.map(item => `<span class="concept-chip">${escapeHtml(item)}</span>`).join("");
     const missing = response.missing.map(item => `<span class="concept-chip missing">${escapeHtml(item)}</span>`).join("");
     const blindSpotText = response.blind_spots.length
-      ? `<p><strong>${response.blind_spots.length} confidence trap${response.blind_spots.length === 1 ? "" : "s"} detected.</strong> These omissions were added to ProofLoop with extra priority.</p>`
+      ? `<p><strong>${t(response.blind_spots.length === 1 ? "confidence_trap_one" : "confidence_trap_many", { count: response.blind_spots.length })}</strong>${t("omissions_added")}</p>`
       : "";
     const evidence = response.sources.map(source => `<div class="source-evidence"><strong>${escapeHtml(source.ref)}</strong>${escapeHtml(source.text)}</div>`).join("");
-    result.innerHTML = `<div class="defense-score"><strong>${response.coverage}%</strong><span>concept coverage at ${response.confidence}% confidence</span></div><p>${escapeHtml(response.feedback)}</p>${blindSpotText}<div class="concept-chips">${covered}${missing}</div><p><strong>Next prompt:</strong> ${escapeHtml(response.next_prompt)}</p>${evidence}`;
+    result.innerHTML = `<div class="defense-score"><strong>${response.coverage}%</strong><span>${t("coverage", { confidence: response.confidence })}</span></div><p>${escapeHtml(response.feedback)}</p>${blindSpotText}<div class="concept-chips">${covered}${missing}</div><p><strong>${t("next_prompt")}:</strong> ${escapeHtml(response.next_prompt)}</p>${evidence}`;
   } catch (error) {
     result.textContent = error.message;
   }
@@ -296,7 +343,7 @@ function renderQuiz() {
   $("#quiz-context").textContent = lecture.title;
   $("#quiz-count").textContent = `${index + 1} / ${quiz.length}`;
   $("#quiz-progress").style.width = `${((index + 1) / quiz.length) * 100}%`;
-  $("#question-label").textContent = `Question ${index + 1} of ${quiz.length} · ${question.concept || "key concept"}`;
+  $("#question-label").textContent = `${t("question_of", { current: index + 1, total: quiz.length })} · ${question.concept || t("key_concept")}`;
   $("#question-text").textContent = question.question;
   $$('[data-confidence]').forEach(button => {
     button.classList.toggle("selected", state.confidences[index] === Number(button.dataset.confidence));
@@ -321,17 +368,17 @@ function renderQuiz() {
 
   const explanation = $("#explanation");
   explanation.hidden = !state.quizSubmitted;
-  explanation.innerHTML = state.quizSubmitted ? `<strong>Evidence · ${escapeHtml(question.source_ref || "Source")}</strong><br>${escapeHtml(question.explanation)}` : "";
+  explanation.innerHTML = state.quizSubmitted ? `<strong>${t("evidence")} · ${escapeHtml(question.source_ref || t("source"))}</strong><br>${escapeHtml(question.explanation)}` : "";
   const result = $("#quiz-result");
   result.hidden = !state.quizSubmitted;
   if (state.quizSubmitted && state.quizResult) {
     const gaps = state.quizResult.knowledge_gaps.length;
     const blind = state.quizResult.blind_spots.length;
-    result.innerHTML = `<strong>${state.quizResult.score} / ${state.quizResult.total} correct</strong>${gaps ? `${gaps} knowledge ${gaps === 1 ? "debt was" : "debts were"} added to ProofLoop.` : "No new knowledge debts. Your review intervals increased."}${blind ? ` BlindSpot Detector found ${blind} high-confidence ${blind === 1 ? "mistake" : "mistakes"}.` : ""}`;
+    result.innerHTML = `<strong>${state.quizResult.score} / ${state.quizResult.total}</strong>${gaps ? t("debts_added", { count: gaps }) : t("no_new_debts")}${blind ? t("blind_found", { count: blind }) : ""}`;
   }
   $("#previous-question").disabled = index === 0;
   const next = $("#next-question");
-  next.textContent = index === quiz.length - 1 ? (state.quizSubmitted ? "Open ProofLoop" : "Finish quiz") : "Next question →";
+  next.textContent = index === quiz.length - 1 ? (state.quizSubmitted ? t("open_proofloop") : t("finish_quiz")) : t("next_question");
 }
 
 $("#previous-question").addEventListener("click", () => {
@@ -347,11 +394,11 @@ $("#next-question").addEventListener("click", async () => {
     return;
   }
   if (state.answers[state.questionIndex] === null) {
-    toast("Choose an answer before continuing.");
+    toast(t("choose_answer"));
     return;
   }
   if (state.confidences[state.questionIndex] === null) {
-    toast("Rate your confidence before continuing.");
+    toast(t("rate_confidence"));
     return;
   }
   if (!last) {
@@ -366,7 +413,7 @@ $("#next-question").addEventListener("click", async () => {
       body: JSON.stringify({ answers: state.answers, confidences: state.confidences }),
     });
     state.quizSubmitted = true;
-    toast(`Quiz complete: ${state.quizResult.score} / ${state.quizResult.total}`);
+    toast(t("quiz_complete", { score: state.quizResult.score, total: state.quizResult.total }));
     renderQuiz();
   } catch (error) {
     toast(error.message);
@@ -387,16 +434,16 @@ async function renderProofLoop() {
   const blindSpots = gaps.filter(gap => gap.is_blind_spot).length;
   $("#radar-score").textContent = health;
   $("#radar-summary").innerHTML = [
-    ["Active knowledge debts", active.length],
-    ["Confidence traps", blindSpots],
-    ["Due for review", due],
-    ["Concepts tracked", gaps.length],
+    [t("active_debts"), active.length],
+    [t("confidence_traps"), blindSpots],
+    [t("due_review"), due],
+    [t("concepts_tracked"), gaps.length],
   ].map(([label, value]) => `<article class="radar-stat"><span>${label}</span><strong>${value}</strong></article>`).join("");
   $("#gap-list").innerHTML = gaps.length ? gaps.map(gap => `
     <article class="gap-card">
-      <div>${gap.is_blind_spot ? `<span class="blindspot-badge">Confidence trap · ${gap.last_confidence}% sure</span>` : ""}<p class="eyebrow">${escapeHtml(gap.lecture_title)} · ${escapeHtml(gap.source_ref)}</p><h3>${escapeHtml(gap.concept)}</h3><p>Mistakes ${gap.mistakes} · successful recalls ${gap.successes}</p><p class="gap-evidence">${escapeHtml(gap.evidence)}</p></div>
-      <div class="gap-actions"><div class="mastery-meter"><i style="width:${gap.mastery}%"></i></div><small>${gap.mastery}% mastery · review ${new Date(gap.next_review).toLocaleDateString()}</small><div class="gap-review-buttons"><button class="mini-button" data-gap="${gap.id}" data-remembered="false">Again</button><button class="mini-button primary" data-gap="${gap.id}" data-remembered="true">Got it</button></div></div>
-    </article>`).join("") : `<div class="empty-state"><span>◉</span><h2>Your radar is clear</h2><p>Complete a quiz and ProofLoop will map weak concepts here.</p><a class="button button-primary" href="#dashboard">Choose material</a></div>`;
+      <div>${gap.is_blind_spot ? `<span class="blindspot-badge">${t("confidence_trap", { confidence: gap.last_confidence })}</span>` : ""}<p class="eyebrow">${escapeHtml(gap.lecture_title)} · ${escapeHtml(gap.source_ref)}</p><h3>${escapeHtml(gap.concept)}</h3><p>${t("mistakes_recalls", { mistakes: gap.mistakes, successes: gap.successes })}</p><p class="gap-evidence">${escapeHtml(gap.evidence)}</p></div>
+      <div class="gap-actions"><div class="mastery-meter"><i style="width:${gap.mastery}%"></i></div><small>${t("mastery_review", { mastery: gap.mastery, date: new Date(gap.next_review).toLocaleDateString(i18n.language) })}</small><div class="gap-review-buttons"><button class="mini-button" data-gap="${gap.id}" data-remembered="false">${t("again")}</button><button class="mini-button primary" data-gap="${gap.id}" data-remembered="true">${t("got_it")}</button></div></div>
+    </article>`).join("") : `<div class="empty-state"><span>◉</span><h2>${t("radar_clear")}</h2><p>${t("complete_quiz")}</p><a class="button button-primary" href="#dashboard">${t("choose_material")}</a></div>`;
   $$('[data-gap]').forEach(button => button.addEventListener("click", async () => {
     try {
       await api(`/radar/${button.dataset.gap}/review`, {
@@ -404,7 +451,7 @@ async function renderProofLoop() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ remembered: button.dataset.remembered === "true" }),
       });
-      toast(button.dataset.remembered === "true" ? "Recall logged. The next interval is longer." : "Scheduled again for tomorrow.");
+      toast(button.dataset.remembered === "true" ? t("recall_logged") : t("tomorrow"));
       await renderProofLoop();
     } catch (error) {
       toast(error.message);
@@ -421,12 +468,12 @@ function showFile(file) {
   const extension = file.name.toLowerCase().split(".").pop();
   if (!supportedExtensions.includes(extension)) {
     fileInput.value = "";
-    toast("Choose PDF, PPTX, DOCX, TXT, or MD.");
+    toast(t("invalid_type"));
     return;
   }
   if (file.size > 25 * 1024 * 1024) {
     fileInput.value = "";
-    toast("The file is larger than 25 MB.");
+    toast(t("too_large"));
     return;
   }
   $("#selected-file").hidden = false;
@@ -463,7 +510,7 @@ $("#upload-form").addEventListener("submit", async event => {
     state.flashcardIndex = 0;
     state.flashcardRevealed = false;
     await refreshDashboard();
-    toast("Evidence-backed study pack created.");
+    toast(t("pack_created"));
     location.hash = "summary";
   } catch (error) {
     toast(error.message);
@@ -479,7 +526,7 @@ function renderRoadmap(plan) {
     target.innerHTML = "";
     return;
   }
-  target.innerHTML = `<div class="section-heading"><div><p class="eyebrow">${escapeHtml(plan.name)}</p><h2>Your next sessions</h2></div><span class="quiet-badge">${plan.days} days left</span></div>` + plan.items.map(item => `
+  target.innerHTML = `<div class="section-heading"><div><p class="eyebrow">${escapeHtml(plan.name)}</p><h2>${t("next_sessions")}</h2></div><span class="quiet-badge">${plan.days} ${t("days_left")}</span></div>` + plan.items.map(item => `
     <article class="plan-day"><strong>${escapeHtml(item.day)}</strong><p>${escapeHtml(item.title)}</p><span>${escapeHtml(item.task)}</span></article>`).join("");
 }
 
@@ -501,27 +548,43 @@ $("#roadmap-form").addEventListener("submit", event => {
   const exam = new Date(`${date}T00:00:00`);
   const days = Math.ceil((exam - today) / 86400000);
   if (!date || days < 1) {
-    toast("Choose a future exam date.");
+    toast(t("future_date"));
     return;
   }
-  const source = state.lectures.length ? state.lectures : [{ title: "Upload your first lecture" }];
+  const source = state.lectures.length ? state.lectures : [{ title: t("upload_first_lecture") }];
   const sessions = Math.min(Math.max(days, 3), 9);
   const items = Array.from({ length: sessions }, (_, index) => {
     const sessionDate = new Date(today.getTime() + Math.round((index + 1) * days / (sessions + 1)) * 86400000);
     const lecture = source[index % source.length];
     return {
-      day: sessionDate.toLocaleDateString(undefined, { month: "short", day: "numeric" }),
+      day: sessionDate.toLocaleDateString(i18n.language, { month: "short", day: "numeric" }),
       title: lecture.title,
-      task: index === sessions - 1 ? "Final mixed quiz" : index % 3 === 1 ? "ProofLoop weak concepts" : index % 3 === 2 ? "Flashcard recall" : "Summary + practice quiz",
+      task: index === sessions - 1 ? t("final_mixed") : index % 3 === 1 ? t("weak_concepts") : index % 3 === 2 ? t("flashcard_recall") : t("summary_quiz"),
     };
   });
   const plan = { name, date, days, items };
   localStorage.setItem("studycloud-roadmap", JSON.stringify(plan));
   renderRoadmap(plan);
-  toast("Roadmap saved in this browser.");
+  toast(t("roadmap_saved"));
 });
 
+async function applyLanguage(language) {
+  if (state.activeRecognition) state.activeRecognition.stop();
+  i18n.apply(language);
+  $("#language-select").value = i18n.language;
+  syncVoiceButtons();
+  await refreshDashboard();
+  route();
+  if (state.activeLecture) {
+    renderSummary();
+    renderQuiz();
+  }
+}
+
 async function start() {
+  i18n.apply(i18n.language);
+  $("#language-select").value = i18n.language;
+  $("#language-select").addEventListener("change", event => { applyLanguage(event.target.value).catch(error => toast(error.message)); });
   const futureDate = new Date(Date.now() + 14 * 86400000).toISOString().slice(0, 10);
   $("#exam-date").min = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
   $("#exam-date").value = futureDate;
