@@ -1,0 +1,12 @@
+__pycache__/
+*.py[cod]
+.venv/
+.idea/
+.env
+data/*.db
+data/uploads/*
+!data/uploads/.gitkeep
+.pytest_cache/
+.coverage
+
+

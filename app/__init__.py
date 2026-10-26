@@ -1,0 +1,2 @@
+"""StudyCloud AI application package."""
+

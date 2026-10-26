@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#4f46e5">
+  <meta name="description" content="Source-backed AI study assistant with adaptive knowledge-gap repair.">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 64 64%22><rect width=%2264%22 height=%2264%22 rx=%2218%22 fill=%22%234f46e5%22/><path d=%22M32 15l4.5 12.5L49 32l-12.5 4.5L32 49l-4.5-12.5L15 32l12.5-4.5z%22 fill=%22white%22/></svg>">
+  <link rel="manifest" href="/static/manifest.webmanifest">
+  <title>StudyCloud AI</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar" aria-label="Primary navigation">
+      <a class="brand" href="#dashboard" aria-label="StudyCloud AI home">
+        <span class="brand-mark" aria-hidden="true">✦</span>
+        <span><strong>StudyCloud AI</strong><small>Cloud MVP</small></span>
+      </a>
+      <nav class="side-nav">
+        <a href="#dashboard" data-route="dashboard"><span>⌂</span>Dashboard</a>
+        <a href="#upload" data-route="upload"><span>⇧</span>Upload lecture</a>
+        <a href="#summary" data-route="summary"><span>✦</span>AI summary</a>
+        <a href="#quiz" data-route="quiz"><span>?</span>Practice quiz</a>
+        <a href="#proofloop" data-route="proofloop"><span>◉</span>ProofLoop radar</a>
+        <a href="#roadmap" data-route="roadmap"><span>⌁</span>Exam roadmap</a>
+      </nav>
+      <div class="course-chip">
+        <span class="status-dot"></span>
+        <div><small>Active workspace</small><strong>My lectures</strong></div>
+      </div>
+    </aside>
+
+    <div class="workspace">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow" id="page-eyebrow">YOUR STUDY WORKSPACE</p>
+          <h1 id="page-title">Dashboard</h1>
+        </div>
+        <div class="topbar-actions">
+          <span class="api-state"><i></i> API ready</span>
+          <button class="avatar" aria-label="Student profile">SC</button>
+        </div>
+      </header>
+
+      <main id="app" tabindex="-1">
+        <section class="view" data-view="dashboard">
+          <div class="hero-grid">
+            <article class="welcome-card">
+              <div>
+                <p class="eyebrow light">STUDYCLOUD WORKSPACE</p>
+                <h2>Turn course files into knowledge you can prove.</h2>
+                <p>Upload notes or slides, study with source-backed summaries, and let ProofLoop find what you only think you know.</p>
+              </div>
+              <a class="button button-light" href="#upload">Upload a lecture <span>→</span></a>
+            </article>
+            <article class="focus-card">
+              <div class="orb" aria-hidden="true"><span>✦</span></div>
+              <div><p class="eyebrow">FOCUS MODE</p><h3>One lecture at a time</h3><p>Everything stays local unless you add a Gemini API key.</p></div>
+            </article>
+          </div>
+
+          <div class="section-heading">
+            <div><p class="eyebrow">WEEKLY MASTERY</p><h2>Your progress</h2></div>
+            <span class="quiet-badge">Live data</span>
+          </div>
+          <div class="metrics" id="metrics"></div>
+
+          <div class="section-heading">
+            <div><p class="eyebrow">LIBRARY</p><h2>Recent course materials</h2></div>
+            <a href="#upload">Add PDF</a>
+          </div>
+          <label class="library-search"><span aria-hidden="true">⌕</span><input id="library-search" type="search" placeholder="Search your materials" aria-label="Search course materials"></label>
+          <div class="lecture-list" id="lecture-list"></div>
+
+          <article class="proofloop-banner">
+            <div><p class="eyebrow light">SIGNATURE FEATURE</p><h2>ProofLoop closes the gap between a wrong answer and the source.</h2><p>Every mistake becomes a tracked knowledge debt with evidence, a review date, and a one-click recall check.</p></div>
+            <a class="button button-light" href="#proofloop">Open knowledge radar <span>→</span></a>
+          </article>
+        </section>
+
+        <section class="view" data-view="upload" hidden>
+          <div class="upload-layout">
+            <div>
+              <div class="intro-copy">
+                <p class="eyebrow">STEP 1 OF 3</p>
+                <h2>Upload lecture material</h2>
+                <p>Upload PDF, PowerPoint, Word, Markdown, or text files up to 25 MB. StudyCloud keeps source locations attached to every learning object.</p>
+              </div>
+              <form id="upload-form">
+                <label class="dropzone" id="dropzone" for="file-input">
+                  <input id="file-input" name="file" type="file" accept=".pdf,.pptx,.docx,.txt,.md,application/pdf,application/vnd.openxmlformats-officedocument.presentationml.presentation,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/markdown" hidden>
+                  <span class="upload-icon" aria-hidden="true">⇧</span>
+                  <strong>Drop course material here or browse files</strong>
+                  <span>PDF · PPTX · DOCX · TXT · MD · max 25 MB</span>
+                </label>
+                <div class="selected-file" id="selected-file" hidden></div>
+                <button class="button button-primary full" id="upload-button" type="submit" disabled>Process lecture <span>✦</span></button>
+              </form>
+              <div class="progress-panel" id="progress-panel" hidden>
+                <div class="spinner"></div>
+                <div><strong>Building your study pack…</strong><span>Extracting text, summarizing ideas, and writing questions.</span></div>
+              </div>
+            </div>
+            <aside class="process-card">
+              <p class="eyebrow">HOW IT WORKS</p>
+              <ol>
+                <li><span>1</span><div><strong>Extract</strong><p>Read pages, slides, paragraphs, and sections.</p></div></li>
+                <li><span>2</span><div><strong>Synthesize</strong><p>Create an evidence-backed summary and flashcards.</p></div></li>
+                <li><span>3</span><div><strong>Prove</strong><p>Test recall and send mistakes into ProofLoop.</p></div></li>
+              </ol>
+              <div class="privacy-note"><span>✓</span><p><strong>Private by default</strong>Your local files stay in this app's data folder.</p></div>
+            </aside>
+          </div>
+        </section>
+
+        <section class="view" data-view="summary" hidden>
+          <div id="summary-empty" class="empty-state">
+            <span>✦</span><h2>No lecture selected</h2><p>Choose a lecture from the dashboard or upload a new PDF.</p><a class="button button-primary" href="#dashboard">Open library</a>
+          </div>
+          <div id="summary-content" hidden>
+            <div class="document-header">
+              <div><p class="eyebrow">AI LECTURE SUMMARY</p><h2 id="summary-title"></h2><div class="document-meta" id="summary-meta"></div></div>
+              <div class="document-actions"><button class="button button-secondary" id="edit-pack" type="button">Edit pack</button><a class="button button-secondary" id="export-link" href="#">Export .md</a><a class="button button-primary" href="#quiz">Start quiz <span>→</span></a></div>
+            </div>
+            <form class="edit-pack-panel" id="edit-pack-form" hidden>
+              <div class="edit-pack-heading"><div><p class="eyebrow">HUMAN IN THE LOOP</p><h2>Edit generated material</h2></div><button class="mini-button" id="cancel-edit-pack" type="button">Cancel</button></div>
+              <label>Title<input id="edit-title" maxlength="160" required></label>
+              <label>Summary<textarea id="edit-summary" rows="7" minlength="20" required></textarea></label>
+              <label>Key ideas, one per line<textarea id="edit-ideas" rows="6" required></textarea></label>
+              <button class="button button-primary" type="submit">Save study pack</button>
+            </form>
+            <div class="summary-grid">
+              <article class="reading-card"><p class="eyebrow">EXECUTIVE SUMMARY</p><p class="lead" id="summary-text"></p><div class="engine-note" id="engine-note"></div></article>
+              <aside class="ideas-card"><p class="eyebrow">KEY IDEAS</p><ol id="key-ideas"></ol></aside>
+            </div>
+            <div class="study-tools-grid">
+              <section class="flashcards-panel"><div class="section-heading compact"><div><p class="eyebrow">ACTIVE RECALL</p><h2>Flashcards</h2></div><span class="quiet-badge" id="flashcard-count"></span></div><div class="flashcard-stage" id="flashcard-stage"></div><div class="flashcard-controls"><button class="mini-button" id="previous-card" type="button">←</button><button class="mini-button primary" id="flip-card" type="button">Reveal answer</button><button class="mini-button" id="next-card" type="button">→</button></div></section>
+              <section class="ask-panel"><p class="eyebrow">ASK THE MATERIAL</p><h2>Grounded Q&amp;A</h2><p>Answers use only your upload and show the strongest source excerpts.</p><form id="ask-form"><input id="ask-input" maxlength="500" placeholder="What does the lecture say about…" required><button class="button button-primary" type="submit">Ask</button></form><div class="ask-result" id="ask-result" hidden></div></section>
+            </div>
+            <section class="defense-panel">
+              <div class="defense-copy"><p class="eyebrow">FEYNMAN DEFENSE</p><h2>Explain it without looking</h2><p>Write or dictate the topic in your own words. StudyCloud measures concept coverage, identifies omissions, and sends confident omissions into BlindSpot Detector.</p></div>
+              <form id="defense-form"><textarea id="defense-input" minlength="20" maxlength="8000" rows="7" placeholder="Explain the topic as if you were teaching a class…" required></textarea><div class="defense-toolbar"><button class="button button-secondary" id="voice-defense" type="button">Start dictation</button><label>Confidence <select id="defense-confidence"><option value="25">Guessing · 25%</option><option value="50" selected>Unsure · 50%</option><option value="80">Confident · 80%</option><option value="100">Certain · 100%</option></select></label><button class="button button-primary" type="submit">Evaluate explanation</button></div></form>
+              <div class="defense-result" id="defense-result" hidden></div>
+            </section>
+          </div>
+        </section>
+
+        <section class="view" data-view="quiz" hidden>
+          <div id="quiz-empty" class="empty-state">
+            <span>?</span><h2>No quiz selected</h2><p>Open a lecture summary first, then launch its quiz.</p><a class="button button-primary" href="#dashboard">Open library</a>
+          </div>
+          <div id="quiz-content" hidden>
+            <div class="quiz-topline"><div><p class="eyebrow" id="quiz-context"></p><h2>Knowledge check</h2></div><span id="quiz-count"></span></div>
+            <div class="progress-track"><i id="quiz-progress"></i></div>
+            <article class="question-card">
+              <div class="question-label" id="question-label"></div>
+              <h3 id="question-text"></h3>
+              <div class="confidence-panel"><span>How sure are you?</span><div id="confidence-options"><button type="button" data-confidence="25">Guessing · 25%</button><button type="button" data-confidence="50">Unsure · 50%</button><button type="button" data-confidence="80">Confident · 80%</button><button type="button" data-confidence="100">Certain · 100%</button></div></div>
+              <div class="options" id="quiz-options"></div>
+              <div class="explanation" id="explanation" hidden></div>
+              <div class="quiz-result" id="quiz-result" hidden></div>
+            </article>
+            <div class="quiz-actions">
+              <button class="button button-secondary" id="previous-question" type="button">← Previous</button>
+              <button class="button button-primary" id="next-question" type="button">Next question →</button>
+            </div>
+          </div>
+        </section>
+
+        <section class="view" data-view="proofloop" hidden>
+          <div class="proofloop-header">
+            <div class="intro-copy"><p class="eyebrow">ADAPTIVE MEMORY ENGINE</p><h2>ProofLoop knowledge radar</h2><p>Wrong answers become knowledge debts. Each debt stays linked to the source and returns on a spaced review schedule until you can recall it.</p></div>
+            <div class="proofloop-score"><strong id="radar-score">100</strong><span>knowledge health</span></div>
+          </div>
+          <div class="radar-summary" id="radar-summary"></div>
+          <div class="gap-list" id="gap-list"></div>
+        </section>
+
+        <section class="view" data-view="roadmap" hidden>
+          <div class="roadmap-layout">
+            <div class="intro-copy"><p class="eyebrow">EXAM PREPARATION</p><h2>Build a simple study roadmap</h2><p>Choose an exam date and StudyCloud will spread your lecture review across the available days.</p></div>
+            <form class="roadmap-form" id="roadmap-form">
+              <label>Exam name<input id="exam-name" required value="Final exam" maxlength="60"></label>
+              <label>Exam date<input id="exam-date" type="date" required></label>
+              <button class="button button-primary" type="submit">Create roadmap</button>
+            </form>
+            <div class="roadmap-plan" id="roadmap-plan"></div>
+          </div>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <nav class="bottom-nav" aria-label="Mobile navigation">
+    <a href="#dashboard" data-route="dashboard"><span>⌂</span>Home</a>
+    <a href="#upload" data-route="upload"><span>⇧</span>Upload</a>
+    <a href="#summary" data-route="summary"><span>✦</span>Summary</a>
+    <a href="#quiz" data-route="quiz"><span>?</span>Quiz</a>
+    <a href="#proofloop" data-route="proofloop"><span>◉</span>Radar</a>
+    <a href="#roadmap" data-route="roadmap"><span>⌁</span>Roadmap</a>
+  </nav>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <script src="/static/app.js" defer></script>
+</body>
+</html>
+
