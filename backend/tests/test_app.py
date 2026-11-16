@@ -11,7 +11,7 @@ os.environ["STUDYCLOUD_SECRET_KEY"] = "tests-only-secret-key-with-more-than-32-c
 from fastapi.testclient import TestClient
 from pypdf import PdfWriter
 
-from app.main import app
+from backend.app.main import app
 
 
 def register(client: TestClient, prefix: str = "student") -> tuple[dict[str, str], dict]:

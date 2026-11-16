@@ -28,6 +28,8 @@ Its signature workflow combines **ProofLoop**, **BlindSpot Detector**, and **Fey
 
 ## Quick start on Windows
 
+The source code is split into `backend/` (FastAPI, database, authentication, document processing) and `frontend/` (HTML, CSS, JavaScript, localization, PWA). Runtime data remains in the root `data/` directory so existing lectures are preserved.
+
 Open the `StudyCloudAI` folder as a PyCharm project. In the PyCharm terminal run:
 
 ```powershell
@@ -43,8 +45,8 @@ Manual setup:
 ```powershell
 py -m venv .venv
 .\.venv\Scripts\Activate.ps1
-python -m pip install -r requirements.txt
-uvicorn app.main:app --reload
+python -m pip install -r backend/requirements.txt
+uvicorn backend.app.main:app --reload
 ```
 
 ## Gemini setup (optional)
@@ -100,8 +102,8 @@ For deployment, set a persistent random `STUDYCLOUD_SECRET_KEY` of at least 32 c
 ## Tests
 
 ```powershell
-python -m pip install pytest
-python -m pytest -q
+python -m pip install -r backend/requirements.txt pytest
+python -m pytest backend/tests -q
 ```
 
 The 11-test suite covers registration/login, Swagger OAuth2, unauthorized access, per-user material and ProofLoop isolation, multi-format ingestion, study-pack generation/editing, grounded Q&A, Feynman Defense, multilingual/PWA assets, exports, and invalid files.
@@ -115,4 +117,4 @@ The 11-test suite covers registration/login, Swagger OAuth2, unauthorized access
 - The offline shell opens without a network, but AI/API operations still require the local FastAPI server.
 - “Unique” is a product direction, not a universal market claim. The differentiated workflow combines calibrated confidence, self-explanation, source evidence, and spaced recall in one loop.
 
-See [ROADMAP.md](ROADMAP.md) for the production deployment sequence.
+See [GUIDE_RU.md](GUIDE_RU.md) for a Russian architecture and PyCharm guide, and [ROADMAP.md](ROADMAP.md) for the production deployment sequence.

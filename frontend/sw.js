@@ -1,4 +1,4 @@
-const CACHE_NAME = "studycloud-shell-v4";
+const CACHE_NAME = "studycloud-shell-v5";
 const SHELL = [
   "/",
   "/static/styles.css",

@@ -5,12 +5,12 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     STUDYCLOUD_DATA_DIR=/app/data
 
 WORKDIR /app
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-COPY app ./app
-COPY static ./static
+COPY backend/requirements.txt ./backend/requirements.txt
+RUN pip install --no-cache-dir -r backend/requirements.txt
+COPY backend ./backend
+COPY frontend ./frontend
 RUN mkdir -p /app/data/uploads
 
 EXPOSE 8000
-CMD ["python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["python", "-m", "uvicorn", "backend.app.main:app", "--host", "0.0.0.0", "--port", "8000"]
 

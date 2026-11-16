@@ -30,8 +30,8 @@ from pydantic import BaseModel, Field, field_validator
 from pypdf import PdfReader
 
 
-BASE_DIR = Path(__file__).resolve().parent.parent
-STATIC_DIR = BASE_DIR / "static"
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+STATIC_DIR = PROJECT_ROOT / "frontend"
 MAX_FILE_SIZE = 25 * 1024 * 1024
 SUPPORTED_EXTENSIONS = {
     ".pdf", ".pptx", ".docx", ".txt", ".md", ".html", ".htm", ".epub", ".csv", ".srt", ".vtt"
@@ -45,7 +45,7 @@ DUMMY_PASSWORD_HASH = password_hash.hash("studycloud-dummy-password")
 
 
 def data_dir() -> Path:
-    path = Path(os.getenv("STUDYCLOUD_DATA_DIR", BASE_DIR / "data")).resolve()
+    path = Path(os.getenv("STUDYCLOUD_DATA_DIR", PROJECT_ROOT / "data")).resolve()
     path.mkdir(parents=True, exist_ok=True)
     (path / "uploads").mkdir(parents=True, exist_ok=True)
     return path
