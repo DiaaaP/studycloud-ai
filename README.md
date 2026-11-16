@@ -117,4 +117,4 @@ The 11-test suite covers registration/login, Swagger OAuth2, unauthorized access
 - The offline shell opens without a network, but AI/API operations still require the local FastAPI server.
 - “Unique” is a product direction, not a universal market claim. The differentiated workflow combines calibrated confidence, self-explanation, source evidence, and spaced recall in one loop.
 
-See [GUIDE_RU.md](GUIDE_RU.md) for a Russian architecture and PyCharm guide, and [ROADMAP.md](ROADMAP.md) for the production deployment sequence.
+See [GUIDE_RU.md](GUIDE_RU.md) for the project/PyCharm guide, [BACKEND_GUIDE_RU.md](BACKEND_GUIDE_RU.md) for a complete Russian backend walkthrough and defense notes, and [ROADMAP.md](ROADMAP.md) for the production deployment sequence.
