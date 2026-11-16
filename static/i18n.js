@@ -2,6 +2,24 @@
   const dictionaries = {
     en: {},
     ru: {
+      "Private workspace": "Личное пространство",
+      "PERSONAL STUDY CLOUD": "ЛИЧНОЕ УЧЕБНОЕ ОБЛАКО",
+      "Your materials. Your progress. Your private workspace.": "Ваши материалы. Ваш прогресс. Ваше личное пространство.",
+      "Every lecture, quiz attempt, confidence trap, and review schedule belongs only to your account.": "Каждый материал, результат теста, ловушка уверенности и график повторений принадлежат только вашему аккаунту.",
+      "✓ JWT-secured API": "✓ API защищён JWT",
+      "✓ Argon2 password hashing": "✓ Пароли хешируются Argon2",
+      "✓ Isolated user data": "✓ Данные пользователей разделены",
+      "WELCOME TO STUDYCLOUD": "ДОБРО ПОЖАЛОВАТЬ В STUDYCLOUD",
+      "Sign in": "Войти",
+      "Continue to your personal study workspace.": "Перейдите в своё личное учебное пространство.",
+      "Create account": "Создать аккаунт",
+      "Username": "Имя пользователя",
+      "Password": "Пароль",
+      "Full name": "Полное имя",
+      "Email": "Электронная почта",
+      "At least 8 characters. Passwords are stored only as Argon2 hashes.": "Минимум 8 символов. Пароли хранятся только в виде хешей Argon2.",
+      "Open Swagger API documentation →": "Открыть документацию Swagger API →",
+      "Sign out": "Выйти",
       "Dashboard": "Главная",
       "Upload lecture": "Загрузить материал",
       "AI summary": "AI-конспект",
@@ -109,6 +127,24 @@
       "Roadmap": "План"
     },
     kk: {
+      "Private workspace": "Жеке кеңістік",
+      "PERSONAL STUDY CLOUD": "ЖЕКЕ ОҚУ БҰЛТЫ",
+      "Your materials. Your progress. Your private workspace.": "Материалдарыңыз. Прогресіңіз. Жеке кеңістігіңіз.",
+      "Every lecture, quiz attempt, confidence trap, and review schedule belongs only to your account.": "Әр материал, тест нәтижесі, сенімділік қатесі және қайталау кестесі тек сіздің аккаунтыңызға тиесілі.",
+      "✓ JWT-secured API": "✓ JWT арқылы қорғалған API",
+      "✓ Argon2 password hashing": "✓ Argon2 құпиясөз хештеуі",
+      "✓ Isolated user data": "✓ Пайдаланушы деректері бөлінген",
+      "WELCOME TO STUDYCLOUD": "STUDYCLOUD-ҚА ҚОШ КЕЛДІҢІЗ",
+      "Sign in": "Кіру",
+      "Continue to your personal study workspace.": "Жеке оқу кеңістігіңізге өтіңіз.",
+      "Create account": "Аккаунт ашу",
+      "Username": "Пайдаланушы аты",
+      "Password": "Құпиясөз",
+      "Full name": "Толық аты-жөні",
+      "Email": "Электрондық пошта",
+      "At least 8 characters. Passwords are stored only as Argon2 hashes.": "Кемінде 8 таңба. Құпиясөздер тек Argon2 хеші түрінде сақталады.",
+      "Open Swagger API documentation →": "Swagger API құжаттамасын ашу →",
+      "Sign out": "Шығу",
       "Dashboard": "Басты бет",
       "Upload lecture": "Материал жүктеу",
       "AI summary": "AI-конспект",
@@ -228,7 +264,8 @@
       evaluating: "Evaluating concept coverage…", coverage: "concept coverage at {confidence}% confidence", confidence_trap_one: "1 confidence trap detected.", confidence_trap_many: "{count} confidence traps detected.", omissions_added: " These omissions were added to ProofLoop with extra priority.", next_prompt: "Next prompt",
       question_of: "Question {current} of {total}", key_concept: "key concept", evidence: "Evidence", no_new_debts: "No new knowledge debts. Your review intervals increased.", debts_added: "{count} knowledge debts were added to ProofLoop.", blind_found: " BlindSpot Detector found {count} high-confidence mistakes.", open_proofloop: "Open ProofLoop", finish_quiz: "Finish quiz", next_question: "Next question →", choose_answer: "Choose an answer before continuing.", rate_confidence: "Rate your confidence before continuing.", quiz_complete: "Quiz complete: {score} / {total}",
       active_debts: "Active knowledge debts", confidence_traps: "Confidence traps", due_review: "Due for review", concepts_tracked: "Concepts tracked", confidence_trap: "Confidence trap · {confidence}% sure", mistakes_recalls: "Mistakes {mistakes} · successful recalls {successes}", mastery_review: "{mastery}% mastery · review {date}", again: "Again", got_it: "Got it", radar_clear: "Your radar is clear", complete_quiz: "Complete a quiz and ProofLoop will map weak concepts here.", choose_material: "Choose material", recall_logged: "Recall logged. The next interval is longer.", tomorrow: "Scheduled again for tomorrow.",
-      invalid_type: "Choose PDF, PPTX, DOCX, TXT, MD, HTML, EPUB, CSV, SRT, or VTT.", too_large: "The file is larger than 25 MB.", pack_created: "Evidence-backed study pack created.", pack_updated: "Study pack updated.", lecture_deleted: "Lecture deleted.", delete_confirm: "Delete this lecture and all related study progress?", future_date: "Choose a future exam date.", roadmap_saved: "Roadmap saved in this browser.", next_sessions: "Your next sessions", days_left: "days left", final_mixed: "Final mixed quiz", weak_concepts: "ProofLoop weak concepts", flashcard_recall: "Flashcard recall", summary_quiz: "Summary + practice quiz", upload_first_lecture: "Upload your first lecture"
+      invalid_type: "Choose PDF, PPTX, DOCX, TXT, MD, HTML, EPUB, CSV, SRT, or VTT.", too_large: "The file is larger than 25 MB.", pack_created: "Evidence-backed study pack created.", pack_updated: "Study pack updated.", lecture_deleted: "Lecture deleted.", delete_confirm: "Delete this lecture and all related study progress?", future_date: "Choose a future exam date.", roadmap_saved: "Roadmap saved in this browser.", next_sessions: "Your next sessions", days_left: "days left", final_mixed: "Final mixed quiz", weak_concepts: "ProofLoop weak concepts", flashcard_recall: "Flashcard recall", summary_quiz: "Summary + practice quiz", upload_first_lecture: "Upload your first lecture",
+      sign_in: "Sign in", create_account: "Create account", login_subtitle: "Continue to your personal study workspace.", register_subtitle: "Create a private workspace for your materials and progress.", please_wait: "Please wait…", session_expired: "Your session expired. Sign in again.", signed_out: "You have signed out."
     },
     ru: {
       your_study_workspace: "Ваше учебное пространство", add_course_material: "Добавить учебный материал", review_essentials: "Повторить главное", test_recall: "Проверить память", repair_knowledge: "Устранить пробелы", plan_session: "Спланировать занятия",
@@ -240,7 +277,8 @@
       evaluating: "Оцениваем покрытие понятий…", coverage: "покрытие понятий при уверенности {confidence}%", confidence_trap_one: "Обнаружена 1 ловушка уверенности.", confidence_trap_many: "Обнаружено ловушек уверенности: {count}.", omissions_added: " Эти пропуски добавлены в ProofLoop с повышенным приоритетом.", next_prompt: "Следующий вопрос",
       question_of: "Вопрос {current} из {total}", key_concept: "ключевое понятие", evidence: "Источник", no_new_debts: "Новых пробелов нет. Интервалы повторения увеличены.", debts_added: "Добавлено пробелов в ProofLoop: {count}.", blind_found: " BlindSpot Detector нашёл уверенных ошибок: {count}.", open_proofloop: "Открыть ProofLoop", finish_quiz: "Завершить тест", next_question: "Следующий вопрос →", choose_answer: "Выберите ответ перед продолжением.", rate_confidence: "Укажите уверенность перед продолжением.", quiz_complete: "Тест завершён: {score} / {total}",
       active_debts: "Активные пробелы", confidence_traps: "Ловушки уверенности", due_review: "Пора повторить", concepts_tracked: "Понятий отслеживается", confidence_trap: "Ловушка уверенности · уверенность {confidence}%", mistakes_recalls: "Ошибки {mistakes} · успешные повторы {successes}", mastery_review: "Освоено {mastery}% · повтор {date}", again: "Повторить", got_it: "Знаю", radar_clear: "Радар чист", complete_quiz: "Пройдите тест, и ProofLoop покажет слабые понятия.", choose_material: "Выбрать материал", recall_logged: "Ответ сохранён. Следующий интервал стал длиннее.", tomorrow: "Повтор назначен на завтра.",
-      invalid_type: "Выберите PDF, PPTX, DOCX, TXT, MD, HTML, EPUB, CSV, SRT или VTT.", too_large: "Файл больше 25 МБ.", pack_created: "Учебный пакет с источниками создан.", pack_updated: "Учебный пакет обновлён.", lecture_deleted: "Материал удалён.", delete_confirm: "Удалить этот материал и всю связанную статистику?", future_date: "Выберите будущую дату экзамена.", roadmap_saved: "План сохранён в этом браузере.", next_sessions: "Следующие занятия", days_left: "дней осталось", final_mixed: "Итоговый смешанный тест", weak_concepts: "Слабые понятия ProofLoop", flashcard_recall: "Повтор карточек", summary_quiz: "Конспект + тест", upload_first_lecture: "Загрузите первый материал"
+      invalid_type: "Выберите PDF, PPTX, DOCX, TXT, MD, HTML, EPUB, CSV, SRT или VTT.", too_large: "Файл больше 25 МБ.", pack_created: "Учебный пакет с источниками создан.", pack_updated: "Учебный пакет обновлён.", lecture_deleted: "Материал удалён.", delete_confirm: "Удалить этот материал и всю связанную статистику?", future_date: "Выберите будущую дату экзамена.", roadmap_saved: "План сохранён в этом браузере.", next_sessions: "Следующие занятия", days_left: "дней осталось", final_mixed: "Итоговый смешанный тест", weak_concepts: "Слабые понятия ProofLoop", flashcard_recall: "Повтор карточек", summary_quiz: "Конспект + тест", upload_first_lecture: "Загрузите первый материал",
+      sign_in: "Войти", create_account: "Создать аккаунт", login_subtitle: "Перейдите в своё личное учебное пространство.", register_subtitle: "Создайте личное пространство для своих материалов и прогресса.", please_wait: "Подождите…", session_expired: "Сессия истекла. Войдите снова.", signed_out: "Вы вышли из аккаунта."
     },
     kk: {
       your_study_workspace: "Сіздің оқу кеңістігіңіз", add_course_material: "Оқу материалын қосу", review_essentials: "Негізгіні қайталау", test_recall: "Есте сақтауды тексеру", repair_knowledge: "Білім олқылығын түзету", plan_session: "Оқуды жоспарлау",
@@ -252,7 +290,8 @@
       evaluating: "Ұғымдардың қамтылуын бағалап жатырмыз…", coverage: "{confidence}% сенімділіктегі ұғымдар қамтылуы", confidence_trap_one: "1 сенімділік қатесі табылды.", confidence_trap_many: "Сенімділік қатесі табылды: {count}.", omissions_added: " Бұл олқылықтар ProofLoop-қа жоғары басымдықпен қосылды.", next_prompt: "Келесі сұрақ",
       question_of: "{total} сұрақтың {current}-і", key_concept: "негізгі ұғым", evidence: "Дереккөз", no_new_debts: "Жаңа олқылық жоқ. Қайталау аралығы ұлғайтылды.", debts_added: "ProofLoop-қа {count} олқылық қосылды.", blind_found: " BlindSpot Detector {count} сенімді қатені тапты.", open_proofloop: "ProofLoop ашу", finish_quiz: "Тестті аяқтау", next_question: "Келесі сұрақ →", choose_answer: "Жалғастыру алдында жауапты таңдаңыз.", rate_confidence: "Жалғастыру алдында сенімділікті белгілеңіз.", quiz_complete: "Тест аяқталды: {score} / {total}",
       active_debts: "Белсенді олқылықтар", confidence_traps: "Сенімділік қателері", due_review: "Қайталау керек", concepts_tracked: "Бақыланатын ұғымдар", confidence_trap: "Сенімділік қатесі · {confidence}% сенімді", mistakes_recalls: "Қателер {mistakes} · сәтті қайталау {successes}", mastery_review: "Меңгерілді {mastery}% · қайталау {date}", again: "Қайтадан", got_it: "Білемін", radar_clear: "Радар таза", complete_quiz: "Тесттен өтіңіз, ProofLoop әлсіз ұғымдарды көрсетеді.", choose_material: "Материал таңдау", recall_logged: "Жауап сақталды. Келесі аралық ұзартылды.", tomorrow: "Қайталау ертеңге жоспарланды.",
-      invalid_type: "PDF, PPTX, DOCX, TXT, MD, HTML, EPUB, CSV, SRT немесе VTT таңдаңыз.", too_large: "Файл 25 МБ-тан үлкен.", pack_created: "Дереккөздері бар оқу жинағы жасалды.", pack_updated: "Оқу жинағы жаңартылды.", lecture_deleted: "Материал жойылды.", delete_confirm: "Бұл материалды және оған қатысты статистиканы жою керек пе?", future_date: "Болашақ емтихан күнін таңдаңыз.", roadmap_saved: "Жоспар осы браузерде сақталды.", next_sessions: "Келесі сабақтар", days_left: "күн қалды", final_mixed: "Қорытынды аралас тест", weak_concepts: "ProofLoop әлсіз ұғымдары", flashcard_recall: "Карточкаларды қайталау", summary_quiz: "Конспект + тест", upload_first_lecture: "Алғашқы материалды жүктеңіз"
+      invalid_type: "PDF, PPTX, DOCX, TXT, MD, HTML, EPUB, CSV, SRT немесе VTT таңдаңыз.", too_large: "Файл 25 МБ-тан үлкен.", pack_created: "Дереккөздері бар оқу жинағы жасалды.", pack_updated: "Оқу жинағы жаңартылды.", lecture_deleted: "Материал жойылды.", delete_confirm: "Бұл материалды және оған қатысты статистиканы жою керек пе?", future_date: "Болашақ емтихан күнін таңдаңыз.", roadmap_saved: "Жоспар осы браузерде сақталды.", next_sessions: "Келесі сабақтар", days_left: "күн қалды", final_mixed: "Қорытынды аралас тест", weak_concepts: "ProofLoop әлсіз ұғымдары", flashcard_recall: "Карточкаларды қайталау", summary_quiz: "Конспект + тест", upload_first_lecture: "Алғашқы материалды жүктеңіз",
+      sign_in: "Кіру", create_account: "Аккаунт ашу", login_subtitle: "Жеке оқу кеңістігіңізге өтіңіз.", register_subtitle: "Материалдарыңыз бен прогресіңіз үшін жеке кеңістік жасаңыз.", please_wait: "Күте тұрыңыз…", session_expired: "Сессия аяқталды. Қайта кіріңіз.", signed_out: "Аккаунттан шықтыңыз."
     }
   };
 

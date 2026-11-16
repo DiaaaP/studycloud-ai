@@ -1,4 +1,4 @@
-# StudyCloud AI 2.0
+# StudyCloud AI 2.1
 
 StudyCloud is a local-first study assistant. It turns course files into source-backed summaries, flashcards, quizzes, grounded answers, and adaptive review sessions.
 
@@ -7,6 +7,8 @@ Its signature workflow combines **ProofLoop**, **BlindSpot Detector**, and **Fey
 ## Features
 
 - Upload PDF, PPTX, DOCX, EPUB, HTML, CSV, SRT, VTT, TXT, and Markdown files up to 25 MB.
+- Register and sign in with Argon2-hashed passwords and expiring JWT access tokens.
+- Keep lectures, quiz attempts, confidence traps, and review history isolated per user.
 - Extract source locations by page, slide, paragraph, table, chapter, row, cue, or section.
 - Generate summaries, five key ideas, flashcards, and 5-7 quiz questions.
 - Ask questions against one uploaded source and inspect supporting excerpts.
@@ -33,6 +35,8 @@ Open the `StudyCloudAI` folder as a PyCharm project. In the PyCharm terminal run
 ```
 
 Then open <http://127.0.0.1:8000>. The first run creates `.venv`, installs dependencies, and seeds a Raft demo lecture.
+
+Create an account on the opening screen. On an upgraded local installation, the first account automatically claims existing non-demo lectures and progress, so earlier StudyCloud data is not lost.
 
 Manual setup:
 
@@ -70,6 +74,10 @@ The `data` directory is mounted into the container, so lectures and progress sur
 
 ## API
 
+- `POST /api/auth/register`
+- `POST /api/auth/login`
+- `POST /api/auth/token` (OAuth2 password flow for Swagger)
+- `GET /api/auth/me`
 - `GET /api/health`
 - `GET /api/stats`
 - `GET /api/lectures`
@@ -85,7 +93,9 @@ The `data` directory is mounted into the container, so lectures and progress sur
 - `POST /api/radar/{gap_id}/review`
 - `DELETE /api/lectures/{id}`
 
-Interactive API documentation: <http://127.0.0.1:8000/docs>.
+Interactive API documentation: <http://127.0.0.1:8000/docs>. Register in the app first, open Swagger, click **Authorize**, and enter the same username and password. Swagger requests a token from `/api/auth/token` and sends it as `Authorization: Bearer …` on protected calls.
+
+For deployment, set a persistent random `STUDYCLOUD_SECRET_KEY` of at least 32 characters. During local development StudyCloud creates `data/jwt-secret.key` automatically; the file is excluded from Git.
 
 ## Tests
 
@@ -94,12 +104,12 @@ python -m pip install pytest
 python -m pytest -q
 ```
 
-The 12-test suite covers multi-format ingestion, study-pack generation and editing, grounded Q&A, confidence-aware quiz scoring, BlindSpot Detector, Feynman Defense, ProofLoop updates, multilingual/PWA assets, exports, and invalid files.
+The 11-test suite covers registration/login, Swagger OAuth2, unauthorized access, per-user material and ProofLoop isolation, multi-format ingestion, study-pack generation/editing, grounded Q&A, Feynman Defense, multilingual/PWA assets, exports, and invalid files.
 
 ## Current limits
 
 - Scanned PDFs still need OCR.
-- The app stores data locally and does not yet have user accounts.
+- Accounts protect data inside this StudyCloud installation; SQLite and uploaded files still live on the same machine.
 - Browser roadmap data uses `localStorage`.
 - Speech recognition depends on browser support and may request microphone permission; typed questions and explanations always work.
 - The offline shell opens without a network, but AI/API operations still require the local FastAPI server.

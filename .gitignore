@@ -4,6 +4,7 @@ __pycache__/
 .idea/
 .env
 data/*.db
+data/*.key
 data/uploads/*
 !data/uploads/.gitkeep
 .pytest_cache/

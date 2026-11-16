@@ -5,6 +5,7 @@ import csv
 import json
 import os
 import re
+import secrets
 import sqlite3
 import uuid
 import zipfile
@@ -17,11 +18,15 @@ from urllib.parse import quote
 
 import httpx
 from docx import Document
-from fastapi import FastAPI, File, HTTPException, UploadFile
+import jwt
+from fastapi import Depends, FastAPI, File, HTTPException, UploadFile, status
 from fastapi.responses import FileResponse, PlainTextResponse
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from fastapi.staticfiles import StaticFiles
+from jwt.exceptions import InvalidTokenError
 from pptx import Presentation
-from pydantic import BaseModel, Field
+from pwdlib import PasswordHash
+from pydantic import BaseModel, Field, field_validator
 from pypdf import PdfReader
 
 
@@ -32,6 +37,11 @@ SUPPORTED_EXTENSIONS = {
     ".pdf", ".pptx", ".docx", ".txt", ".md", ".html", ".htm", ".epub", ".csv", ".srt", ".vtt"
 }
 MAX_ARCHIVE_UNCOMPRESSED_SIZE = 100 * 1024 * 1024
+JWT_ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = 8 * 60
+password_hash = PasswordHash.recommended()
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/token")
+DUMMY_PASSWORD_HASH = password_hash.hash("studycloud-dummy-password")
 
 
 def data_dir() -> Path:
@@ -54,12 +64,60 @@ def ensure_column(db: sqlite3.Connection, table: str, column: str, declaration: 
         db.execute(f"ALTER TABLE {table} ADD COLUMN {column} {declaration}")
 
 
+def migrate_knowledge_gaps_ownership(db: sqlite3.Connection) -> None:
+    """Upgrade the old global gap table to per-user uniqueness without losing progress."""
+    row = db.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='knowledge_gaps'").fetchone()
+    normalized = re.sub(r"\s+", "", row["sql"] or "") if row else ""
+    if "UNIQUE(user_id,lecture_id,concept)" in normalized:
+        return
+    db.executescript(
+        """
+        ALTER TABLE knowledge_gaps RENAME TO knowledge_gaps_legacy;
+        CREATE TABLE knowledge_gaps (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id TEXT,
+            lecture_id TEXT NOT NULL,
+            concept TEXT NOT NULL,
+            mistakes INTEGER NOT NULL DEFAULT 0,
+            successes INTEGER NOT NULL DEFAULT 0,
+            evidence TEXT NOT NULL,
+            source_ref TEXT NOT NULL,
+            next_review TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            false_confidence INTEGER NOT NULL DEFAULT 0,
+            last_confidence INTEGER NOT NULL DEFAULT 0,
+            UNIQUE(user_id, lecture_id, concept),
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+            FOREIGN KEY (lecture_id) REFERENCES lectures(id) ON DELETE CASCADE
+        );
+        INSERT INTO knowledge_gaps
+        (id, user_id, lecture_id, concept, mistakes, successes, evidence, source_ref,
+         next_review, updated_at, false_confidence, last_confidence)
+        SELECT id, user_id, lecture_id, concept, mistakes, successes, evidence, source_ref,
+               next_review, updated_at, false_confidence, last_confidence
+        FROM knowledge_gaps_legacy;
+        DROP TABLE knowledge_gaps_legacy;
+        """
+    )
+
+
 def init_database() -> None:
     with connect() as db:
         db.executescript(
             """
+            CREATE TABLE IF NOT EXISTS users (
+                id TEXT PRIMARY KEY,
+                username TEXT NOT NULL UNIQUE COLLATE NOCASE,
+                email TEXT NOT NULL UNIQUE COLLATE NOCASE,
+                full_name TEXT NOT NULL,
+                password_hash TEXT NOT NULL,
+                is_active INTEGER NOT NULL DEFAULT 1,
+                created_at TEXT NOT NULL
+            );
+
             CREATE TABLE IF NOT EXISTS lectures (
                 id TEXT PRIMARY KEY,
+                owner_id TEXT,
                 title TEXT NOT NULL,
                 filename TEXT NOT NULL,
                 pages INTEGER NOT NULL DEFAULT 0,
@@ -69,21 +127,25 @@ def init_database() -> None:
                 key_ideas TEXT NOT NULL,
                 quiz TEXT NOT NULL,
                 engine TEXT NOT NULL,
-                created_at TEXT NOT NULL
+                created_at TEXT NOT NULL,
+                FOREIGN KEY (owner_id) REFERENCES users(id) ON DELETE CASCADE
             );
 
             CREATE TABLE IF NOT EXISTS quiz_attempts (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id TEXT,
                 lecture_id TEXT NOT NULL,
                 score INTEGER NOT NULL,
                 total INTEGER NOT NULL,
                 answers TEXT NOT NULL,
                 created_at TEXT NOT NULL,
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
                 FOREIGN KEY (lecture_id) REFERENCES lectures(id) ON DELETE CASCADE
             );
 
             CREATE TABLE IF NOT EXISTS knowledge_gaps (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id TEXT,
                 lecture_id TEXT NOT NULL,
                 concept TEXT NOT NULL,
                 mistakes INTEGER NOT NULL DEFAULT 0,
@@ -92,7 +154,8 @@ def init_database() -> None:
                 source_ref TEXT NOT NULL,
                 next_review TEXT NOT NULL,
                 updated_at TEXT NOT NULL,
-                UNIQUE(lecture_id, concept),
+                UNIQUE(user_id, lecture_id, concept),
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
                 FOREIGN KEY (lecture_id) REFERENCES lectures(id) ON DELETE CASCADE
             );
             """
@@ -100,15 +163,121 @@ def init_database() -> None:
         ensure_column(db, "lectures", "file_type", "TEXT NOT NULL DEFAULT 'PDF'")
         ensure_column(db, "lectures", "source_chunks", "TEXT NOT NULL DEFAULT '[]'")
         ensure_column(db, "lectures", "flashcards", "TEXT NOT NULL DEFAULT '[]'")
+        ensure_column(db, "lectures", "owner_id", "TEXT")
         ensure_column(db, "quiz_attempts", "confidences", "TEXT NOT NULL DEFAULT '[]'")
+        ensure_column(db, "quiz_attempts", "user_id", "TEXT")
         ensure_column(db, "knowledge_gaps", "false_confidence", "INTEGER NOT NULL DEFAULT 0")
         ensure_column(db, "knowledge_gaps", "last_confidence", "INTEGER NOT NULL DEFAULT 0")
+        ensure_column(db, "knowledge_gaps", "user_id", "TEXT")
+        migrate_knowledge_gaps_ownership(db)
+        db.executescript(
+            """
+            CREATE INDEX IF NOT EXISTS idx_lectures_owner ON lectures(owner_id, created_at);
+            CREATE INDEX IF NOT EXISTS idx_attempts_user ON quiz_attempts(user_id, created_at);
+            CREATE INDEX IF NOT EXISTS idx_gaps_user ON knowledge_gaps(user_id, updated_at);
+            """
+        )
 
         if os.getenv("STUDYCLOUD_SEED_DEMO", "1") != "0":
             count = db.execute("SELECT COUNT(*) FROM lectures").fetchone()[0]
             if count == 0:
                 seed_demo(db)
         upgrade_legacy_lectures(db)
+
+
+def jwt_secret() -> str:
+    configured = os.getenv("STUDYCLOUD_SECRET_KEY", "").strip()
+    if configured:
+        if len(configured) < 32:
+            raise RuntimeError("STUDYCLOUD_SECRET_KEY must contain at least 32 characters")
+        return configured
+    secret_path = data_dir() / "jwt-secret.key"
+    if secret_path.exists():
+        return secret_path.read_text(encoding="utf-8").strip()
+    generated = secrets.token_urlsafe(48)
+    secret_path.write_text(generated, encoding="utf-8")
+    return generated
+
+
+def public_user(row: sqlite3.Row | dict[str, Any]) -> dict[str, Any]:
+    user = dict(row)
+    return {
+        "id": user["id"],
+        "username": user["username"],
+        "email": user["email"],
+        "full_name": user["full_name"],
+        "created_at": user["created_at"],
+    }
+
+
+def create_access_token(user: sqlite3.Row | dict[str, Any]) -> str:
+    user_data = dict(user)
+    now = datetime.now(UTC)
+    return jwt.encode(
+        {
+            "sub": f"user:{user_data['id']}",
+            "username": user_data["username"],
+            "iat": now,
+            "exp": now + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES),
+        },
+        jwt_secret(),
+        algorithm=JWT_ALGORITHM,
+    )
+
+
+def authenticate_user(username: str, password: str) -> sqlite3.Row | None:
+    with connect() as db:
+        user = db.execute(
+            "SELECT * FROM users WHERE username = ? COLLATE NOCASE AND is_active = 1",
+            (username.strip(),),
+        ).fetchone()
+    if not user:
+        password_hash.verify(password, DUMMY_PASSWORD_HASH)
+        return None
+    return user if password_hash.verify(password, user["password_hash"]) else None
+
+
+def get_current_user(token: str = Depends(oauth2_scheme)) -> dict[str, Any]:
+    credentials_error = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    try:
+        payload = jwt.decode(token, jwt_secret(), algorithms=[JWT_ALGORITHM])
+        subject = str(payload.get("sub", ""))
+        if not subject.startswith("user:"):
+            raise credentials_error
+        user_id = subject.removeprefix("user:")
+    except InvalidTokenError as error:
+        raise credentials_error from error
+    with connect() as db:
+        user = db.execute("SELECT * FROM users WHERE id = ? AND is_active = 1", (user_id,)).fetchone()
+    if not user:
+        raise credentials_error
+    return dict(user)
+
+
+def owned_lecture(
+    db: sqlite3.Connection,
+    lecture_id: str,
+    user_id: str,
+    *,
+    write: bool = False,
+) -> sqlite3.Row:
+    if write:
+        row = db.execute(
+            "SELECT * FROM lectures WHERE id = ? AND owner_id = ?",
+            (lecture_id, user_id),
+        ).fetchone()
+    else:
+        row = db.execute(
+            "SELECT * FROM lectures WHERE id = ? AND (owner_id = ? OR id = 'demo-raft')",
+            (lecture_id, user_id),
+        ).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Lecture not found")
+    return row
 
 
 def clean_text(value: str) -> str:
@@ -556,6 +725,7 @@ def row_to_lecture(row: sqlite3.Row, include_quiz: bool = True) -> dict[str, Any
     lecture["flashcards"] = json.loads(lecture.get("flashcards") or "[]")
     lecture["quiz"] = json.loads(lecture["quiz"]) if include_quiz else []
     lecture.pop("text_content", None)
+    lecture.pop("owner_id", None)
     return lecture
 
 
@@ -574,6 +744,7 @@ def gap_to_dict(row: sqlite3.Row) -> dict[str, Any]:
         gap["mistakes"] * 2 + gap.get("false_confidence", 0) * 3 - gap["successes"],
     )
     gap["is_blind_spot"] = gap.get("false_confidence", 0) > 0
+    gap.pop("user_id", None)
     return gap
 
 
@@ -608,35 +779,161 @@ class DefenseRequest(BaseModel):
     confidence: int = Field(default=50, ge=0, le=100)
 
 
+class RegistrationRequest(BaseModel):
+    username: str = Field(min_length=3, max_length=32, pattern=r"^[A-Za-z0-9_.-]+$")
+    email: str = Field(min_length=5, max_length=160)
+    full_name: str = Field(min_length=2, max_length=100)
+    password: str = Field(min_length=8, max_length=128)
+
+    @field_validator("email")
+    @classmethod
+    def validate_email(cls, value: str) -> str:
+        normalized = value.strip().lower()
+        if not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", normalized):
+            raise ValueError("Enter a valid email address")
+        return normalized
+
+    @field_validator("username", "full_name")
+    @classmethod
+    def trim_text(cls, value: str) -> str:
+        return value.strip()
+
+
+class LoginRequest(BaseModel):
+    username: str = Field(min_length=1, max_length=160)
+    password: str = Field(min_length=1, max_length=128)
+
+
+class UserResponse(BaseModel):
+    id: str
+    username: str
+    email: str
+    full_name: str
+    created_at: str
+
+
+class TokenResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    user: UserResponse
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     init_database()
     yield
 
 
-app = FastAPI(title="StudyCloud AI", version="2.0.0", lifespan=lifespan)
+app = FastAPI(
+    title="StudyCloud AI",
+    version="2.1.0",
+    description=(
+        "A multilingual, source-grounded study assistant. Register or sign in, then use Swagger's "
+        "Authorize button with the OAuth2 password flow to access your private study workspace."
+    ),
+    lifespan=lifespan,
+)
+
+
+def token_response(user: sqlite3.Row | dict[str, Any]) -> dict[str, Any]:
+    return {"access_token": create_access_token(user), "token_type": "bearer", "user": public_user(user)}
+
+
+@app.post("/api/auth/register", response_model=TokenResponse, status_code=201, tags=["Authentication"])
+def register(request: RegistrationRequest) -> dict[str, Any]:
+    user_id = uuid.uuid4().hex
+    created_at = datetime.now(UTC).isoformat()
+    try:
+        with connect() as db:
+            first_user = db.execute("SELECT COUNT(*) FROM users").fetchone()[0] == 0
+            db.execute(
+                """
+                INSERT INTO users (id, username, email, full_name, password_hash, created_at)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    user_id, request.username, request.email, clean_text(request.full_name),
+                    password_hash.hash(request.password), created_at,
+                ),
+            )
+            if first_user:
+                db.execute(
+                    "UPDATE lectures SET owner_id = ? WHERE owner_id IS NULL AND id != 'demo-raft'",
+                    (user_id,),
+                )
+                db.execute("UPDATE quiz_attempts SET user_id = ? WHERE user_id IS NULL", (user_id,))
+                db.execute("UPDATE knowledge_gaps SET user_id = ? WHERE user_id IS NULL", (user_id,))
+            user = db.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+    except sqlite3.IntegrityError as error:
+        message = str(error).lower()
+        field = "username" if "username" in message else "email"
+        raise HTTPException(status_code=409, detail=f"This {field} is already registered") from error
+    return token_response(user)
+
+
+@app.post("/api/auth/login", response_model=TokenResponse, tags=["Authentication"])
+def login(request: LoginRequest) -> dict[str, Any]:
+    user = authenticate_user(request.username, request.password)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect username or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    return token_response(user)
+
+
+@app.post("/api/auth/token", response_model=TokenResponse, tags=["Authentication"])
+def swagger_token(form: OAuth2PasswordRequestForm = Depends()) -> dict[str, Any]:
+    user = authenticate_user(form.username, form.password)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect username or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    return token_response(user)
+
+
+@app.get("/api/auth/me", response_model=UserResponse, tags=["Authentication"])
+def current_profile(current_user: dict[str, Any] = Depends(get_current_user)) -> dict[str, Any]:
+    return public_user(current_user)
 
 
 @app.get("/api/health")
 def health() -> dict[str, Any]:
     return {
         "status": "ok",
-        "version": "2.0.0",
+        "version": "2.1.0",
         "formats": sorted(extension.removeprefix(".").upper() for extension in SUPPORTED_EXTENSIONS),
     }
 
 
 @app.get("/api/stats")
-def stats() -> dict[str, int]:
+def stats(current_user: dict[str, Any] = Depends(get_current_user)) -> dict[str, int]:
     with connect() as db:
         lecture_stats = db.execute(
-            "SELECT COUNT(*) AS count, COALESCE(SUM(word_count), 0) AS words FROM lectures"
+            """
+            SELECT COUNT(*) AS count, COALESCE(SUM(word_count), 0) AS words
+            FROM lectures WHERE owner_id = ? OR id = 'demo-raft'
+            """,
+            (current_user["id"],),
         ).fetchone()
         quiz_stats = db.execute(
-            "SELECT COUNT(*) AS count, COALESCE(SUM(score), 0) AS score, COALESCE(SUM(total), 0) AS total FROM quiz_attempts"
+            """
+            SELECT COUNT(*) AS count, COALESCE(SUM(score), 0) AS score, COALESCE(SUM(total), 0) AS total
+            FROM quiz_attempts WHERE user_id = ?
+            """,
+            (current_user["id"],),
         ).fetchone()
-        open_gaps = db.execute("SELECT COUNT(*) FROM knowledge_gaps WHERE mistakes > successes").fetchone()[0]
-        blind_spots = db.execute("SELECT COUNT(*) FROM knowledge_gaps WHERE false_confidence > 0").fetchone()[0]
+        open_gaps = db.execute(
+            "SELECT COUNT(*) FROM knowledge_gaps WHERE user_id = ? AND mistakes > successes",
+            (current_user["id"],),
+        ).fetchone()[0]
+        blind_spots = db.execute(
+            "SELECT COUNT(*) FROM knowledge_gaps WHERE user_id = ? AND false_confidence > 0",
+            (current_user["id"],),
+        ).fetchone()[0]
     accuracy = round(100 * quiz_stats["score"] / quiz_stats["total"]) if quiz_stats["total"] else 0
     return {
         "lectures": lecture_stats["count"], "words": lecture_stats["words"],
@@ -646,23 +943,31 @@ def stats() -> dict[str, int]:
 
 
 @app.get("/api/lectures")
-def list_lectures() -> list[dict[str, Any]]:
+def list_lectures(current_user: dict[str, Any] = Depends(get_current_user)) -> list[dict[str, Any]]:
     with connect() as db:
-        rows = db.execute("SELECT * FROM lectures ORDER BY created_at DESC").fetchall()
+        rows = db.execute(
+            "SELECT * FROM lectures WHERE owner_id = ? OR id = 'demo-raft' ORDER BY created_at DESC",
+            (current_user["id"],),
+        ).fetchall()
     return [row_to_lecture(row, include_quiz=False) for row in rows]
 
 
 @app.get("/api/lectures/{lecture_id}")
-def get_lecture(lecture_id: str) -> dict[str, Any]:
+def get_lecture(
+    lecture_id: str,
+    current_user: dict[str, Any] = Depends(get_current_user),
+) -> dict[str, Any]:
     with connect() as db:
-        row = db.execute("SELECT * FROM lectures WHERE id = ?", (lecture_id,)).fetchone()
-    if not row:
-        raise HTTPException(status_code=404, detail="Lecture not found")
+        row = owned_lecture(db, lecture_id, current_user["id"])
     return row_to_lecture(row)
 
 
 @app.patch("/api/lectures/{lecture_id}")
-def update_lecture(lecture_id: str, update: StudyPackUpdate) -> dict[str, Any]:
+def update_lecture(
+    lecture_id: str,
+    update: StudyPackUpdate,
+    current_user: dict[str, Any] = Depends(get_current_user),
+) -> dict[str, Any]:
     values = update.model_dump(exclude_none=True)
     if not values:
         raise HTTPException(status_code=400, detail="No study-pack changes were provided")
@@ -683,19 +988,20 @@ def update_lecture(lecture_id: str, update: StudyPackUpdate) -> dict[str, Any]:
     values = {key: value for key, value in values.items() if key in allowed}
     assignments = ", ".join(f"{key} = ?" for key in values)
     with connect() as db:
-        exists = db.execute("SELECT id FROM lectures WHERE id = ?", (lecture_id,)).fetchone()
-        if not exists:
-            raise HTTPException(status_code=404, detail="Lecture not found")
+        owned_lecture(db, lecture_id, current_user["id"], write=True)
         db.execute(
-            f"UPDATE lectures SET {assignments} WHERE id = ?",
-            (*values.values(), lecture_id),
+            f"UPDATE lectures SET {assignments} WHERE id = ? AND owner_id = ?",
+            (*values.values(), lecture_id, current_user["id"]),
         )
         row = db.execute("SELECT * FROM lectures WHERE id = ?", (lecture_id,)).fetchone()
     return row_to_lecture(row)
 
 
 @app.post("/api/lectures", status_code=201)
-async def upload_lecture(file: UploadFile = File(...)) -> dict[str, Any]:
+async def upload_lecture(
+    file: UploadFile = File(...),
+    current_user: dict[str, Any] = Depends(get_current_user),
+) -> dict[str, Any]:
     filename = Path(file.filename or "lecture.txt").name
     extension = Path(filename).suffix.lower()
     if extension not in SUPPORTED_EXTENSIONS:
@@ -723,12 +1029,12 @@ async def upload_lecture(file: UploadFile = File(...)) -> dict[str, Any]:
         db.execute(
             """
             INSERT INTO lectures
-            (id, title, filename, pages, word_count, text_content, summary, key_ideas, quiz, engine,
+            (id, owner_id, title, filename, pages, word_count, text_content, summary, key_ideas, quiz, engine,
              created_at, file_type, source_chunks, flashcards)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
-                lecture_id, title, filename, units, len(text.split()), text, material["summary"],
+                lecture_id, current_user["id"], title, filename, units, len(text.split()), text, material["summary"],
                 json.dumps(material["key_ideas"], ensure_ascii=False),
                 json.dumps(material["quiz"], ensure_ascii=False), material["engine"], created_at,
                 file_type, json.dumps(chunks, ensure_ascii=False),
@@ -740,12 +1046,14 @@ async def upload_lecture(file: UploadFile = File(...)) -> dict[str, Any]:
 
 
 @app.post("/api/lectures/{lecture_id}/quiz")
-def submit_quiz(lecture_id: str, submission: QuizSubmission) -> dict[str, Any]:
+def submit_quiz(
+    lecture_id: str,
+    submission: QuizSubmission,
+    current_user: dict[str, Any] = Depends(get_current_user),
+) -> dict[str, Any]:
     now = datetime.now(UTC)
     with connect() as db:
-        row = db.execute("SELECT quiz FROM lectures WHERE id = ?", (lecture_id,)).fetchone()
-        if not row:
-            raise HTTPException(status_code=404, detail="Lecture not found")
+        row = owned_lecture(db, lecture_id, current_user["id"])
         quiz = json.loads(row["quiz"])
         answers = submission.answers[: len(quiz)]
         answers += [None] * (len(quiz) - len(answers))
@@ -755,8 +1063,11 @@ def submit_quiz(lecture_id: str, submission: QuizSubmission) -> dict[str, Any]:
         correct = [answer == item["correct_index"] for answer, item in zip(answers, quiz)]
         score = sum(correct)
         db.execute(
-            "INSERT INTO quiz_attempts (lecture_id, score, total, answers, confidences, created_at) VALUES (?, ?, ?, ?, ?, ?)",
-            (lecture_id, score, len(quiz), json.dumps(answers), json.dumps(confidences), now.isoformat()),
+            """
+            INSERT INTO quiz_attempts (user_id, lecture_id, score, total, answers, confidences, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (current_user["id"], lecture_id, score, len(quiz), json.dumps(answers), json.dumps(confidences), now.isoformat()),
         )
 
         changed_gaps = []
@@ -764,7 +1075,8 @@ def submit_quiz(lecture_id: str, submission: QuizSubmission) -> dict[str, Any]:
         for is_correct, confidence, item in zip(correct, confidences, quiz):
             concept = str(item.get("concept") or item.get("answer") or "Key concept")[:120]
             existing = db.execute(
-                "SELECT * FROM knowledge_gaps WHERE lecture_id = ? AND concept = ?", (lecture_id, concept)
+                "SELECT * FROM knowledge_gaps WHERE user_id = ? AND lecture_id = ? AND concept = ?",
+                (current_user["id"], lecture_id, concept),
             ).fetchone()
             mistakes = (existing["mistakes"] if existing else 0) + (0 if is_correct else 1)
             successes = (existing["successes"] if existing else 0) + (1 if is_correct else 0)
@@ -775,22 +1087,23 @@ def submit_quiz(lecture_id: str, submission: QuizSubmission) -> dict[str, Any]:
             db.execute(
                 """
                 INSERT INTO knowledge_gaps
-                (lecture_id, concept, mistakes, successes, evidence, source_ref, next_review, updated_at,
+                (user_id, lecture_id, concept, mistakes, successes, evidence, source_ref, next_review, updated_at,
                  false_confidence, last_confidence)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT(lecture_id, concept) DO UPDATE SET
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(user_id, lecture_id, concept) DO UPDATE SET
                     mistakes=excluded.mistakes, successes=excluded.successes, evidence=excluded.evidence,
                     source_ref=excluded.source_ref, next_review=excluded.next_review, updated_at=excluded.updated_at,
                     false_confidence=excluded.false_confidence, last_confidence=excluded.last_confidence
                 """,
                 (
-                    lecture_id, concept, mistakes, successes, str(item.get("explanation", "")),
+                    current_user["id"], lecture_id, concept, mistakes, successes, str(item.get("explanation", "")),
                     str(item.get("source_ref", "Source")), next_review, now.isoformat(),
                     false_confidence, confidence,
                 ),
             )
             gap = db.execute(
-                "SELECT * FROM knowledge_gaps WHERE lecture_id = ? AND concept = ?", (lecture_id, concept)
+                "SELECT * FROM knowledge_gaps WHERE user_id = ? AND lecture_id = ? AND concept = ?",
+                (current_user["id"], lecture_id, concept),
             ).fetchone()
             if not is_correct:
                 serialized = gap_to_dict(gap)
@@ -841,11 +1154,13 @@ async def gemini_answer(question: str, sources: list[dict[str, str]]) -> str | N
 
 
 @app.post("/api/lectures/{lecture_id}/ask")
-async def ask_lecture(lecture_id: str, request: AskRequest) -> dict[str, Any]:
+async def ask_lecture(
+    lecture_id: str,
+    request: AskRequest,
+    current_user: dict[str, Any] = Depends(get_current_user),
+) -> dict[str, Any]:
     with connect() as db:
-        row = db.execute("SELECT source_chunks FROM lectures WHERE id = ?", (lecture_id,)).fetchone()
-    if not row:
-        raise HTTPException(status_code=404, detail="Lecture not found")
+        row = owned_lecture(db, lecture_id, current_user["id"])
     chunks = json.loads(row["source_chunks"] or "[]")
     sources = ranked_sources(request.question, chunks)
     answer = await gemini_answer(request.question, sources)
@@ -877,11 +1192,13 @@ async def ask_lecture(lecture_id: str, request: AskRequest) -> dict[str, Any]:
 
 
 @app.post("/api/lectures/{lecture_id}/defend")
-def defend_lecture(lecture_id: str, request: DefenseRequest) -> dict[str, Any]:
+def defend_lecture(
+    lecture_id: str,
+    request: DefenseRequest,
+    current_user: dict[str, Any] = Depends(get_current_user),
+) -> dict[str, Any]:
     with connect() as db:
-        row = db.execute("SELECT * FROM lectures WHERE id = ?", (lecture_id,)).fetchone()
-        if not row:
-            raise HTTPException(status_code=404, detail="Lecture not found")
+        row = owned_lecture(db, lecture_id, current_user["id"])
         lecture = row_to_lecture(row)
         explanation_tokens = set(
             re.findall(r"[A-Za-zА-Яа-яЁё]{4,}", request.explanation.lower())
@@ -923,8 +1240,8 @@ def defend_lecture(lecture_id: str, request: DefenseRequest) -> dict[str, Any]:
         blind_spots = []
         for item in missing[:6]:
             existing = db.execute(
-                "SELECT * FROM knowledge_gaps WHERE lecture_id = ? AND concept = ?",
-                (lecture_id, item["concept"]),
+                "SELECT * FROM knowledge_gaps WHERE user_id = ? AND lecture_id = ? AND concept = ?",
+                (current_user["id"], lecture_id, item["concept"]),
             ).fetchone()
             mistakes = (existing["mistakes"] if existing else 0) + 1
             successes = existing["successes"] if existing else 0
@@ -934,23 +1251,23 @@ def defend_lecture(lecture_id: str, request: DefenseRequest) -> dict[str, Any]:
             db.execute(
                 """
                 INSERT INTO knowledge_gaps
-                (lecture_id, concept, mistakes, successes, evidence, source_ref, next_review, updated_at,
+                (user_id, lecture_id, concept, mistakes, successes, evidence, source_ref, next_review, updated_at,
                  false_confidence, last_confidence)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT(lecture_id, concept) DO UPDATE SET
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(user_id, lecture_id, concept) DO UPDATE SET
                     mistakes=excluded.mistakes, successes=excluded.successes, evidence=excluded.evidence,
                     source_ref=excluded.source_ref, next_review=excluded.next_review, updated_at=excluded.updated_at,
                     false_confidence=excluded.false_confidence, last_confidence=excluded.last_confidence
                 """,
                 (
-                    lecture_id, item["concept"], mistakes, successes, item["evidence"], item["source_ref"],
+                    current_user["id"], lecture_id, item["concept"], mistakes, successes, item["evidence"], item["source_ref"],
                     (now + timedelta(days=1)).isoformat(), now.isoformat(), false_confidence, request.confidence,
                 ),
             )
             if request.confidence >= 75:
                 gap = db.execute(
-                    "SELECT * FROM knowledge_gaps WHERE lecture_id = ? AND concept = ?",
-                    (lecture_id, item["concept"]),
+                    "SELECT * FROM knowledge_gaps WHERE user_id = ? AND lecture_id = ? AND concept = ?",
+                    (current_user["id"], lecture_id, item["concept"]),
                 ).fetchone()
                 blind_spots.append(gap_to_dict(gap))
 
@@ -980,23 +1297,32 @@ def defend_lecture(lecture_id: str, request: DefenseRequest) -> dict[str, Any]:
 
 
 @app.get("/api/radar")
-def knowledge_radar() -> list[dict[str, Any]]:
+def knowledge_radar(current_user: dict[str, Any] = Depends(get_current_user)) -> list[dict[str, Any]]:
     with connect() as db:
         rows = db.execute(
             """
             SELECT g.*, l.title AS lecture_title
             FROM knowledge_gaps g JOIN lectures l ON l.id = g.lecture_id
+            WHERE g.user_id = ?
             ORDER BY (g.mistakes * 2 - g.successes) DESC, g.updated_at DESC
-            """
+            """,
+            (current_user["id"],),
         ).fetchall()
     return [gap_to_dict(row) for row in rows]
 
 
 @app.post("/api/radar/{gap_id}/review")
-def review_gap(gap_id: int, review: GapReview) -> dict[str, Any]:
+def review_gap(
+    gap_id: int,
+    review: GapReview,
+    current_user: dict[str, Any] = Depends(get_current_user),
+) -> dict[str, Any]:
     now = datetime.now(UTC)
     with connect() as db:
-        row = db.execute("SELECT * FROM knowledge_gaps WHERE id = ?", (gap_id,)).fetchone()
+        row = db.execute(
+            "SELECT * FROM knowledge_gaps WHERE id = ? AND user_id = ?",
+            (gap_id, current_user["id"]),
+        ).fetchone()
         if not row:
             raise HTTPException(status_code=404, detail="Knowledge gap not found")
         mistakes = row["mistakes"] + (0 if review.remembered else 1)
@@ -1004,25 +1330,32 @@ def review_gap(gap_id: int, review: GapReview) -> dict[str, Any]:
         false_confidence = max(0, row["false_confidence"] - (1 if review.remembered else 0))
         review_days = min(30, 2 ** min(successes, 4)) if review.remembered else 1
         db.execute(
-            "UPDATE knowledge_gaps SET mistakes=?, successes=?, false_confidence=?, next_review=?, updated_at=? WHERE id=?",
+            """
+            UPDATE knowledge_gaps SET mistakes=?, successes=?, false_confidence=?, next_review=?, updated_at=?
+            WHERE id=? AND user_id=?
+            """,
             (
                 mistakes, successes, false_confidence,
-                (now + timedelta(days=review_days)).isoformat(), now.isoformat(), gap_id,
+                (now + timedelta(days=review_days)).isoformat(), now.isoformat(), gap_id, current_user["id"],
             ),
         )
         updated = db.execute(
-            "SELECT g.*, l.title AS lecture_title FROM knowledge_gaps g JOIN lectures l ON l.id=g.lecture_id WHERE g.id=?",
-            (gap_id,),
+            """
+            SELECT g.*, l.title AS lecture_title FROM knowledge_gaps g
+            JOIN lectures l ON l.id=g.lecture_id WHERE g.id=? AND g.user_id=?
+            """,
+            (gap_id, current_user["id"]),
         ).fetchone()
     return gap_to_dict(updated)
 
 
 @app.get("/api/lectures/{lecture_id}/export")
-def export_lecture(lecture_id: str) -> PlainTextResponse:
+def export_lecture(
+    lecture_id: str,
+    current_user: dict[str, Any] = Depends(get_current_user),
+) -> PlainTextResponse:
     with connect() as db:
-        row = db.execute("SELECT * FROM lectures WHERE id = ?", (lecture_id,)).fetchone()
-    if not row:
-        raise HTTPException(status_code=404, detail="Lecture not found")
+        row = owned_lecture(db, lecture_id, current_user["id"])
     lecture = row_to_lecture(row)
     lines = [f"# {lecture['title']}", "", "## Summary", "", lecture["summary"], "", "## Key ideas", ""]
     lines.extend(f"- {idea}" for idea in lecture["key_ideas"])
@@ -1038,11 +1371,12 @@ def export_lecture(lecture_id: str) -> PlainTextResponse:
 
 
 @app.get("/api/lectures/{lecture_id}/source")
-def download_source(lecture_id: str) -> FileResponse:
+def download_source(
+    lecture_id: str,
+    current_user: dict[str, Any] = Depends(get_current_user),
+) -> FileResponse:
     with connect() as db:
-        row = db.execute("SELECT filename FROM lectures WHERE id = ?", (lecture_id,)).fetchone()
-    if not row:
-        raise HTTPException(status_code=404, detail="Lecture not found")
+        row = owned_lecture(db, lecture_id, current_user["id"])
     candidates = list((data_dir() / "uploads").glob(f"{lecture_id}.*"))
     if not candidates:
         raise HTTPException(status_code=404, detail="Original demo source is not stored")
@@ -1050,14 +1384,15 @@ def download_source(lecture_id: str) -> FileResponse:
 
 
 @app.delete("/api/lectures/{lecture_id}", status_code=204)
-def delete_lecture(lecture_id: str) -> None:
+def delete_lecture(
+    lecture_id: str,
+    current_user: dict[str, Any] = Depends(get_current_user),
+) -> None:
     if lecture_id == "demo-raft":
         raise HTTPException(status_code=400, detail="The built-in demo lecture cannot be deleted")
     with connect() as db:
-        exists = db.execute("SELECT id FROM lectures WHERE id = ?", (lecture_id,)).fetchone()
-        if not exists:
-            raise HTTPException(status_code=404, detail="Lecture not found")
-        db.execute("DELETE FROM lectures WHERE id = ?", (lecture_id,))
+        owned_lecture(db, lecture_id, current_user["id"], write=True)
+        db.execute("DELETE FROM lectures WHERE id = ? AND owner_id = ?", (lecture_id, current_user["id"]))
     for path in (data_dir() / "uploads").glob(f"{lecture_id}.*"):
         path.unlink(missing_ok=True)
 

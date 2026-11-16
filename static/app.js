@@ -1,4 +1,5 @@
 const state = {
+  user: null,
   lectures: [],
   radar: [],
   activeLecture: null,
@@ -12,6 +13,8 @@ const state = {
   activeRecognition: null,
   voiceTarget: null,
 };
+
+const TOKEN_KEY = "studycloud-token";
 
 const routes = {
   dashboard: ["your_study_workspace", "Dashboard"],
@@ -32,11 +35,106 @@ const escapeHtml = (value = "") => String(value).replace(/[&<>'"]/g, character =
 }[character]));
 
 async function api(path, options = {}) {
-  const response = await fetch(`/api${path}`, { cache: "no-store", ...options });
+  const token = localStorage.getItem(TOKEN_KEY);
+  const headers = new Headers(options.headers || {});
+  if (token) headers.set("Authorization", `Bearer ${token}`);
+  const response = await fetch(`/api${path}`, { cache: "no-store", ...options, headers });
   if (response.status === 204) return null;
   const body = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(t(body.detail || "Something went wrong"));
+  if (!response.ok) {
+    if (response.status === 401 && !path.startsWith("/auth/")) showAuth(t("session_expired"));
+    throw new Error(t(body.detail || "Something went wrong"));
+  }
   return body;
+}
+
+function showAuth(message = "") {
+  state.user = null;
+  localStorage.removeItem(TOKEN_KEY);
+  $("#app-shell").hidden = true;
+  $("#bottom-nav").hidden = true;
+  $("#auth-shell").hidden = false;
+  $("#profile-menu").hidden = true;
+  const error = $("#auth-error");
+  error.textContent = message;
+  error.hidden = !message;
+}
+
+function showWorkspace(user) {
+  state.user = user;
+  $("#auth-shell").hidden = true;
+  $("#app-shell").hidden = false;
+  $("#bottom-nav").hidden = false;
+  $("#profile-name").textContent = user.full_name;
+  $("#profile-email").textContent = `${user.username} · ${user.email}`;
+  $("#profile-toggle").textContent = user.full_name.split(/\s+/).filter(Boolean).slice(0, 2).map(part => part[0]).join("").toUpperCase() || "SC";
+  window.requestAnimationFrame(() => window.scrollTo({ top: 0, behavior: "auto" }));
+}
+
+async function establishSession(payload) {
+  localStorage.setItem(TOKEN_KEY, payload.access_token);
+  showWorkspace(payload.user);
+  await refreshDashboard();
+  route();
+}
+
+function selectAuthMode(mode) {
+  const register = mode === "register";
+  $("#login-form").hidden = register;
+  $("#register-form").hidden = !register;
+  $("#show-login").classList.toggle("active", !register);
+  $("#show-register").classList.toggle("active", register);
+  $("#auth-title").textContent = t(register ? "create_account" : "sign_in");
+  $("#auth-subtitle").textContent = t(register ? "register_subtitle" : "login_subtitle");
+  $("#auth-error").hidden = true;
+}
+
+async function submitAuth(form, path, payload) {
+  const button = form.querySelector('button[type="submit"]');
+  const original = button.textContent;
+  button.disabled = true;
+  button.textContent = t("please_wait");
+  $("#auth-error").hidden = true;
+  try {
+    await establishSession(await api(path, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    }));
+    form.reset();
+  } catch (error) {
+    $("#auth-error").textContent = error.message;
+    $("#auth-error").hidden = false;
+  } finally {
+    button.disabled = false;
+    button.textContent = original;
+  }
+}
+
+async function authorizedFile(url, openInNewTab = false) {
+  const response = await fetch(url, {
+    cache: "no-store",
+    headers: { Authorization: `Bearer ${localStorage.getItem(TOKEN_KEY) || ""}` },
+  });
+  if (response.status === 401) {
+    showAuth(t("session_expired"));
+    throw new Error(t("session_expired"));
+  }
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}));
+    throw new Error(t(body.detail || "Something went wrong"));
+  }
+  const blobUrl = URL.createObjectURL(await response.blob());
+  if (openInNewTab) {
+    window.open(blobUrl, "_blank", "noopener");
+  } else {
+    const link = document.createElement("a");
+    link.href = blobUrl;
+    const disposition = response.headers.get("content-disposition") || "";
+    link.download = disposition.match(/filename="?([^";]+)"?/i)?.[1] || "studycloud-export.md";
+    link.click();
+  }
+  window.setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
 }
 
 function toast(message) {
@@ -96,7 +194,7 @@ function renderLectureList(lectures) {
       <div class="lecture-actions">
         <button class="mini-button primary" data-summary="${lecture.id}">${t("study_pack")}</button>
         <button class="mini-button" data-quiz="${lecture.id}">${t("practice_quiz")}</button>
-        <button class="mini-button danger" data-delete="${lecture.id}" aria-label="${t("delete")}" title="${t("delete")}">×</button>
+        ${lecture.id === "demo-raft" ? "" : `<button class="mini-button danger" data-delete="${lecture.id}" aria-label="${t("delete")}" title="${t("delete")}">×</button>`}
       </div>
     </article>`).join("") : `<div class="empty-state"><span>⇧</span><h2>${t("library_empty")}</h2><p>${t("upload_first")}</p></div>`;
 
@@ -157,11 +255,25 @@ function renderSummary() {
   $("#key-ideas").innerHTML = lecture.key_ideas.map(idea => `<li>${escapeHtml(idea)}</li>`).join("");
   $("#export-link").href = `/api/lectures/${lecture.id}/export`;
   $("#source-link").href = `/api/lectures/${lecture.id}/source`;
+  $("#edit-pack").hidden = lecture.id === "demo-raft";
+  $("#source-link").hidden = lecture.id === "demo-raft";
   $("#edit-title").value = lecture.title;
   $("#edit-summary").value = lecture.summary;
   $("#edit-ideas").value = lecture.key_ideas.join("\n");
   renderFlashcard();
 }
+
+$("#export-link").addEventListener("click", event => {
+  event.preventDefault();
+  if (!state.activeLecture) return;
+  authorizedFile(`/api/lectures/${state.activeLecture.id}/export`).catch(error => toast(error.message));
+});
+
+$("#source-link").addEventListener("click", event => {
+  event.preventDefault();
+  if (!state.activeLecture) return;
+  authorizedFile(`/api/lectures/${state.activeLecture.id}/source`, true).catch(error => toast(error.message));
+});
 
 $("#edit-pack").addEventListener("click", () => {
   if (!state.activeLecture) return;
@@ -572,19 +684,48 @@ async function applyLanguage(language) {
   if (state.activeRecognition) state.activeRecognition.stop();
   i18n.apply(language);
   $("#language-select").value = i18n.language;
+  $("#auth-language-select").value = i18n.language;
   syncVoiceButtons();
-  await refreshDashboard();
-  route();
-  if (state.activeLecture) {
-    renderSummary();
-    renderQuiz();
+  selectAuthMode($("#register-form").hidden ? "login" : "register");
+  if (state.user) {
+    await refreshDashboard();
+    route();
+    if (state.activeLecture) {
+      renderSummary();
+      renderQuiz();
+    }
   }
 }
 
 async function start() {
   i18n.apply(i18n.language);
   $("#language-select").value = i18n.language;
+  $("#auth-language-select").value = i18n.language;
   $("#language-select").addEventListener("change", event => { applyLanguage(event.target.value).catch(error => toast(error.message)); });
+  $("#auth-language-select").addEventListener("change", event => { applyLanguage(event.target.value).catch(error => toast(error.message)); });
+  $("#show-login").addEventListener("click", () => selectAuthMode("login"));
+  $("#show-register").addEventListener("click", () => selectAuthMode("register"));
+  $("#login-form").addEventListener("submit", event => {
+    event.preventDefault();
+    submitAuth(event.currentTarget, "/auth/login", {
+      username: $("#login-username").value.trim(),
+      password: $("#login-password").value,
+    });
+  });
+  $("#register-form").addEventListener("submit", event => {
+    event.preventDefault();
+    submitAuth(event.currentTarget, "/auth/register", {
+      full_name: $("#register-name").value.trim(),
+      username: $("#register-username").value.trim(),
+      email: $("#register-email").value.trim(),
+      password: $("#register-password").value,
+    });
+  });
+  $("#profile-toggle").addEventListener("click", () => { $("#profile-menu").hidden = !$("#profile-menu").hidden; });
+  $("#logout-button").addEventListener("click", () => showAuth(t("signed_out")));
+  document.addEventListener("click", event => {
+    if (!event.target.closest(".profile-control")) $("#profile-menu").hidden = true;
+  });
   const futureDate = new Date(Date.now() + 14 * 86400000).toISOString().slice(0, 10);
   $("#exam-date").min = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
   $("#exam-date").value = futureDate;
@@ -592,11 +733,17 @@ async function start() {
   if ("serviceWorker" in navigator) {
     navigator.serviceWorker.register("/sw.js").catch(() => {});
   }
+  const token = localStorage.getItem(TOKEN_KEY);
+  if (!token) {
+    showAuth();
+    return;
+  }
   try {
+    showWorkspace(await api("/auth/me"));
     await refreshDashboard();
     route();
   } catch (error) {
-    toast(`API unavailable: ${error.message}`);
+    showAuth(error.message === "Not authenticated" || error.message === "Could not validate credentials" ? t("session_expired") : error.message);
   }
 }
 

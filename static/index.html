@@ -11,7 +11,49 @@
   <link rel="stylesheet" href="/static/styles.css">
 </head>
 <body>
-  <div class="app-shell">
+  <section class="auth-shell" id="auth-shell">
+    <div class="auth-visual">
+      <a class="brand auth-brand" href="#" aria-label="StudyCloud AI home">
+        <span class="brand-mark" aria-hidden="true">✦</span>
+        <span><strong>StudyCloud AI</strong><small>Private workspace</small></span>
+      </a>
+      <div class="auth-promise">
+        <p class="eyebrow light">PERSONAL STUDY CLOUD</p>
+        <h1>Your materials. Your progress. Your private workspace.</h1>
+        <p>Every lecture, quiz attempt, confidence trap, and review schedule belongs only to your account.</p>
+        <ul><li>✓ JWT-secured API</li><li>✓ Argon2 password hashing</li><li>✓ Isolated user data</li></ul>
+      </div>
+    </div>
+    <div class="auth-panel">
+      <label class="language-picker auth-language" aria-label="Interface language"><span aria-hidden="true">文</span><select id="auth-language-select"><option value="en">EN</option><option value="ru">RU</option><option value="kk">ҚАЗ</option></select></label>
+      <div class="auth-card">
+        <p class="eyebrow">WELCOME TO STUDYCLOUD</p>
+        <h2 id="auth-title">Sign in</h2>
+        <p id="auth-subtitle">Continue to your personal study workspace.</p>
+        <div class="auth-tabs" role="tablist">
+          <button class="active" id="show-login" type="button" role="tab">Sign in</button>
+          <button id="show-register" type="button" role="tab">Create account</button>
+        </div>
+        <form class="auth-form" id="login-form">
+          <label>Username<input id="login-username" autocomplete="username" minlength="3" required></label>
+          <label>Password<input id="login-password" type="password" autocomplete="current-password" minlength="8" required></label>
+          <button class="button button-primary full" type="submit">Sign in</button>
+        </form>
+        <form class="auth-form" id="register-form" hidden>
+          <label>Full name<input id="register-name" autocomplete="name" minlength="2" maxlength="100" required></label>
+          <label>Username<input id="register-username" autocomplete="username" pattern="[A-Za-z0-9_.-]{3,32}" required></label>
+          <label>Email<input id="register-email" type="email" autocomplete="email" required></label>
+          <label>Password<input id="register-password" type="password" autocomplete="new-password" minlength="8" maxlength="128" required></label>
+          <small>At least 8 characters. Passwords are stored only as Argon2 hashes.</small>
+          <button class="button button-primary full" type="submit">Create account</button>
+        </form>
+        <p class="auth-error" id="auth-error" role="alert" hidden></p>
+        <a class="swagger-link" href="/docs" target="_blank" rel="noopener">Open Swagger API documentation →</a>
+      </div>
+    </div>
+  </section>
+
+  <div class="app-shell" id="app-shell" hidden>
     <aside class="sidebar" aria-label="Primary navigation">
       <a class="brand" href="#dashboard" aria-label="StudyCloud AI home">
         <span class="brand-mark" aria-hidden="true">✦</span>
@@ -40,7 +82,13 @@
         <div class="topbar-actions">
           <label class="language-picker" aria-label="Interface language"><span aria-hidden="true">文</span><select id="language-select"><option value="en">EN</option><option value="ru">RU</option><option value="kk">ҚАЗ</option></select></label>
           <span class="api-state"><i></i> API ready</span>
-          <button class="avatar" aria-label="Student profile">SC</button>
+          <div class="profile-control">
+            <button class="avatar" id="profile-toggle" aria-label="Student profile">SC</button>
+            <div class="profile-menu" id="profile-menu" hidden>
+              <strong id="profile-name"></strong><span id="profile-email"></span>
+              <button class="mini-button" id="logout-button" type="button">Sign out</button>
+            </div>
+          </div>
         </div>
       </header>
 
@@ -193,7 +241,7 @@
     </div>
   </div>
 
-  <nav class="bottom-nav" aria-label="Mobile navigation">
+  <nav class="bottom-nav" id="bottom-nav" aria-label="Mobile navigation" hidden>
     <a href="#dashboard" data-route="dashboard"><span>⌂</span>Home</a>
     <a href="#upload" data-route="upload"><span>⇧</span>Upload</a>
     <a href="#summary" data-route="summary"><span>✦</span>Summary</a>
