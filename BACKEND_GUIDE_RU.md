@@ -423,7 +423,7 @@ Backend:
 5. Если ответ неправильный и уверенность не меньше 75%, увеличивает `false_confidence`.
 6. Назначает дату повторения.
 
-Неправильный ответ возвращает понятие на повтор через один день. Успешные повторения увеличивают интервал примерно по схеме 1, 2, 4, 8, 16 дней.
+Неправильный ответ возвращает понятие на повтор через один день. После первого успешного ответа интервал становится 2 дня, затем 4, 8 и 16 дней.
 
 BlindSpot Detector — это не отдельная модель. Это логика калибровки: высокая уверенность + неправильный ответ означает более опасный пробел, чем неуверенная ошибка.
 
@@ -678,4 +678,909 @@ def example(current_user: dict = Depends(get_current_user)):
 4. Ограничивайте размер строк, списков и файлов через Pydantic и серверные проверки.
 5. Не возвращайте `password_hash`, секреты и полный `text_content` без необходимости.
 6. Добавляйте тест, в котором второй пользователь пытается получить чужие данные.
+
+## 31. Подробный разбор импортов
+
+Импорты в `main.py` можно разделить на шесть групп.
+
+### Работа с данными и файлами
+
+```python
+import io
+import csv
+import json
+import sqlite3
+import zipfile
+from pathlib import Path
+```
+
+- `io.BytesIO` превращает загруженные байты в файловый объект для библиотек PDF, DOCX и PPTX.
+- `csv` читает таблицы без дополнительной зависимости.
+- `json` сериализует списки вопросов, карточек и source chunks в SQLite.
+- `sqlite3` отвечает за локальную базу.
+- `zipfile` проверяет EPUB/DOCX/PPTX и читает EPUB.
+- `Path` безопасно работает с путями и расширениями.
+
+### Текст и HTML
+
+```python
+import re
+from html.parser import HTMLParser
+```
+
+Регулярные выражения используются для нормализации пробелов, предложений, слов, субтитров и имён экспортируемых файлов. `HTMLParser` извлекает видимый текст без JavaScript и CSS.
+
+### Идентификаторы, время и безопасность
+
+```python
+import secrets
+import uuid
+from datetime import UTC, datetime, timedelta
+```
+
+- `uuid` создаёт ID пользователей и материалов.
+- `secrets` создаёт криптографически случайный JWT-секрет.
+- всё серверное время хранится в UTC, чтобы даты не зависели от часового пояса компьютера.
+
+### FastAPI
+
+```python
+from fastapi import Depends, FastAPI, File, HTTPException, UploadFile, status
+from fastapi.responses import FileResponse, PlainTextResponse
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from fastapi.staticfiles import StaticFiles
+```
+
+- `Depends` подключает проверку JWT к endpoint.
+- `UploadFile` принимает multipart-файл.
+- `HTTPException` превращает серверную проверку в понятный HTTP-ответ.
+- `FileResponse` отдаёт оригиналы и HTML.
+- `PlainTextResponse` отдаёт Markdown.
+- OAuth2-классы связывают JWT со Swagger.
+
+### Внешние библиотеки документов
+
+```python
+from pypdf import PdfReader
+from docx import Document
+from pptx import Presentation
+```
+
+У каждой библиотеки одна ответственность: прочитать структуру конкретного формата. Генерация учебного пакета не зависит от формата, потому что все extractors приводят документы к общей структуре `chunks`.
+
+### Авторизация и валидация
+
+```python
+import jwt
+from jwt.exceptions import InvalidTokenError
+from pwdlib import PasswordHash
+from pydantic import BaseModel, Field, field_validator
+```
+
+`PyJWT` работает с токенами, `pwdlib` — с Argon2, Pydantic — с телами HTTP-запросов.
+
+## 32. Справочник всех функций
+
+### Инфраструктура
+
+| Функция | Принимает | Возвращает | Побочный эффект |
+|---|---|---|---|
+| `data_dir()` | ничего | абсолютный `Path` | создаёт `data/uploads` |
+| `connect()` | ничего | SQLite connection | открывает БД, включает foreign keys |
+| `ensure_column()` | connection, таблица, поле, DDL | ничего | добавляет отсутствующую колонку |
+| `migrate_knowledge_gaps_ownership()` | connection | ничего | перестраивает старую таблицу gaps |
+| `init_database()` | ничего | ничего | создаёт/обновляет схему и demo |
+| `clean_text()` | строку | строку | нет; схлопывает пробелы |
+
+### Авторизация
+
+| Функция | Принимает | Возвращает | Возможная ошибка |
+|---|---|---|---|
+| `jwt_secret()` | ничего | секретную строку | `RuntimeError`, если env-секрет короче 32 символов |
+| `public_user()` | строку SQLite или dict | безопасный профиль | — |
+| `create_access_token()` | пользователя | JWT-строку | — |
+| `authenticate_user()` | username, password | строку пользователя или `None` | — |
+| `get_current_user()` | Bearer token через dependency | dict пользователя | `401` |
+| `owned_lecture()` | DB, lecture ID, user ID, режим записи | строку материала | `404` |
+
+### Разбор документов
+
+| Функция/класс | Назначение |
+|---|---|
+| `ReadableHTMLParser` | собирает видимые текстовые HTML-блоки |
+| `html_blocks()` | удобная оболочка над parser |
+| `validate_archive()` | проверяет ZIP-контейнер и распакованный размер |
+| `extract_document()` | приводит любой поддерживаемый файл к тексту и chunks |
+
+### Генерация
+
+| Функция | Назначение |
+|---|---|
+| `split_sentences()` | делит нормализованный текст на предложения |
+| `keywords()` | считает информативные частые термины |
+| `find_source()` | находит chunk с максимальным пересечением слов |
+| `local_study_material()` | строит пакет без внешнего AI |
+| `gemini_study_material()` | запрашивает JSON-пакет у Gemini |
+| `normalize_material()` | исправляет/заменяет некорректный AI-ответ |
+| `upgrade_legacy_lectures()` | добавляет старым материалам новые структуры |
+| `seed_demo()` | записывает демонстрационную лекцию Raft |
+
+### Представление данных
+
+| Функция | Назначение |
+|---|---|
+| `row_to_lecture()` | SQLite row → JSON-ready dict, скрывает сырой текст и owner ID |
+| `mastery_score()` | считает освоение 0–100 |
+| `gap_to_dict()` | добавляет mastery, priority, blind-spot flag |
+| `token_response()` | собирает единый ответ login/register |
+
+### Учебная логика
+
+| Функция | Назначение |
+|---|---|
+| `ranked_sources()` | ранжирует chunks относительно вопроса |
+| `gemini_answer()` | отвечает только по выбранному evidence |
+
+## 33. Что происходит при старте процесса
+
+Хронология запуска:
+
+1. Python импортирует `backend.app.main`.
+2. Создаются `password_hash`, `oauth2_scheme` и dummy hash.
+3. Создаётся объект `FastAPI` с `lifespan`.
+4. Uvicorn вызывает startup-часть `lifespan()`.
+5. `init_database()` проверяет схему и миграции.
+6. FastAPI начинает принимать запросы.
+7. `/` отдаёт `frontend/index.html`.
+8. Браузер запрашивает JS/CSS через `/static/...`.
+9. Frontend проверяет сохранённый токен через `/api/auth/me`.
+
+Почему база инициализируется в lifespan, а не просто на уровне импорта: startup hook гарантирует выполнение именно при запуске приложения и корректно работает с `TestClient`.
+
+## 34. Полная последовательность регистрации
+
+Запрос:
+
+```http
+POST /api/auth/register
+Content-Type: application/json
+
+{
+  "username": "dias",
+  "email": "dias@example.com",
+  "full_name": "Dias Student",
+  "password": "StrongPassword42"
+}
+```
+
+Внутри сервера:
+
+```text
+Pydantic validation
+  → генерируется user_id
+  → открывается транзакция SQLite
+  → проверяется, первый ли это пользователь
+  → password_hash.hash(password)
+  → INSERT INTO users
+  → при первом аккаунте назначаются старые записи
+  → SELECT созданного пользователя
+  → commit транзакции
+  → create_access_token
+  → public_user удаляет закрытые поля
+```
+
+Ответ:
+
+```json
+{
+  "access_token": "eyJ...",
+  "token_type": "bearer",
+  "user": {
+    "id": "e1f...",
+    "username": "dias",
+    "email": "dias@example.com",
+    "full_name": "Dias Student",
+    "created_at": "2026-11-16T12:00:00+00:00"
+  }
+}
+```
+
+`password_hash` не попадает ни в `UserResponse`, ни в JSON.
+
+Если уникальный индекс SQLite отклоняет username/email, `IntegrityError` преобразуется в `409 Conflict`.
+
+## 35. Полная последовательность защищённого запроса
+
+Frontend отправляет:
+
+```http
+GET /api/lectures
+Authorization: Bearer eyJ...
+```
+
+`OAuth2PasswordBearer` извлекает строку после `Bearer`. Затем `get_current_user()`:
+
+```text
+jwt.decode(token, secret, algorithms=["HS256"])
+  → проверка подписи
+  → проверка exp
+  → проверка формата sub="user:..."
+  → SELECT пользователя по ID и is_active=1
+  → dict пользователя передаётся endpoint
+```
+
+Endpoint не доверяет username или user ID из браузера. Единственный источник ID — проверенный `sub` токена.
+
+## 36. Связи базы данных
+
+```text
+users
+  id ───────────────┐
+                    │ owner_id
+                    ▼
+                 lectures
+                    │ id
+           ┌────────┴─────────┐
+           │ lecture_id       │ lecture_id
+           ▼                  ▼
+    quiz_attempts       knowledge_gaps
+           ▲                  ▲
+           │ user_id          │ user_id
+           └──────── users ───┘
+```
+
+Поведение удаления:
+
+- удаление пользователя каскадно удаляет его материалы, попытки и gaps;
+- удаление материала каскадно удаляет его попытки и gaps;
+- физический файл удаляется отдельно, потому что SQLite не управляет файловой системой.
+
+Фактического endpoint удаления пользователя сейчас нет, но схема готова к такому действию.
+
+## 37. Почему JSON хранится внутри SQLite
+
+`key_ideas`, `quiz`, `source_chunks`, `flashcards`, `answers`, `confidences` хранятся как JSON-текст.
+
+Преимущества для MVP:
+
+- не нужно создавать много вспомогательных таблиц;
+- учебный пакет читается одной строкой;
+- структура вопроса может развиваться без сложной миграции.
+
+Недостатки:
+
+- труднее делать SQL-аналитику по отдельным вопросам;
+- нельзя навесить внешний ключ на каждую карточку;
+- изменение одного элемента требует перезаписи JSON.
+
+Для production можно нормализовать вопросы/карточки в отдельные таблицы или использовать PostgreSQL JSONB.
+
+## 38. Upload pipeline с конкретными данными
+
+Пусть пользователь загружает `network.pdf`, размер 2 МБ.
+
+```text
+filename = "network.pdf"
+extension = ".pdf"
+contents = 2 МБ bytes
+```
+
+После `extract_document()`:
+
+```python
+text = "Computer networks ... TCP ..."
+units = 14
+chunks = [
+    {"ref": "Page 1", "text": "..."},
+    {"ref": "Page 2", "text": "..."}
+]
+```
+
+После генерации:
+
+```python
+material = {
+    "summary": "...",
+    "key_ideas": ["..."],
+    "quiz": [{...}],
+    "flashcards": [{...}],
+    "engine": "Local extractive engine"
+}
+```
+
+Файл сохраняется не как `network.pdf`, а примерно как:
+
+```text
+data/uploads/9fa31d2b8c11.pdf
+```
+
+Исходное имя остаётся в колонке `filename`. Это предотвращает перезапись файлов с одинаковыми именами.
+
+## 39. Ошибочные сценарии загрузки
+
+### Расширение `.pdf`, но содержимое не PDF
+
+Проверяется сигнатура `%PDF`. Ответ: `400`.
+
+### Пустой файл
+
+Ответ: `400 The uploaded file is empty`.
+
+### 26 МБ
+
+Сервер читает 25 МБ + 1 байт, обнаруживает превышение и возвращает `413`, не загружая произвольный объём в память.
+
+### Битый DOCX
+
+`validate_archive()` видит, что байты не являются ZIP, и возвращает `400`.
+
+### ZIP bomb
+
+Сумма `file_size` элементов превышает 100 МБ: `413` до распаковки всего содержимого.
+
+### PDF-скан
+
+Страницы существуют, но `extract_text()` возвращает пустые строки. Итоговый текст короче 80 символов: `422` с предложением использовать OCR.
+
+## 40. Пример работы локального summarizer
+
+Исходный упрощённый текст:
+
+```text
+TCP establishes a reliable connection. TCP numbers segments.
+Acknowledgements confirm delivery. Lost segments are retransmitted.
+```
+
+Частые содержательные термины могут получиться такими:
+
+```text
+TCP, segments, connection, acknowledgements, delivery
+```
+
+Самым ранним терминам в рейтинге назначается больший вес. Предложение с `TCP` и `segments` получает высокий score. Из семи лучших предложений формируется summary, а из пяти первых — key ideas.
+
+Для вопроса слово `segments` заменяется:
+
+```text
+Which term best completes this statement?
+TCP numbers _____.
+```
+
+`find_source()` сравнивает множество слов предложения со словами каждого chunk и прикрепляет страницу с максимальным пересечением.
+
+Это extractive, а не generative подход: локальный движок в основном выбирает и преобразует существующие предложения, поэтому меньше рискует добавить внешний факт.
+
+## 41. Разбор нормализации ответа Gemini
+
+Даже если модель обещает JSON, backend не доверяет структуре без проверки.
+
+Примеры проблем:
+
+```json
+{"options": ["A", "B"]}
+```
+
+Такой вопрос имеет не четыре варианта — options заменяются fallback-вариантами.
+
+```json
+{"correct_index": 8}
+```
+
+Индекс вне диапазона 0–3 — заменяется корректным локальным индексом.
+
+Если после нормализации вопросов меньше пяти, весь quiz берётся из local engine. Если карточек меньше трёх, берутся локальные карточки.
+
+Следовательно, внешний AI улучшает контент, но не определяет работоспособность структуры API.
+
+## 42. Расчёт Quiz + BlindSpot на примере
+
+Пусть вопрос относится к понятию `Leader election`.
+
+Пользователь выбрал неправильный ответ и указал уверенность 90%.
+
+До ответа:
+
+```text
+mistakes = 1
+successes = 0
+false_confidence = 0
+```
+
+После ответа:
+
+```text
+mistakes = 2
+successes = 0
+false_confidence = 1
+last_confidence = 90
+next_review = завтра
+```
+
+Почему `false_confidence` увеличился: ответ неправильный и `90 >= 75`.
+
+Приоритет:
+
+```text
+priority = mistakes × 2 + false_confidence × 3 - successes
+priority = 2 × 2 + 1 × 3 - 0 = 7
+```
+
+Обычная неуверенная ошибка дала бы приоритет 4. Значит, уверенная ошибка поднимается в radar выше.
+
+## 43. Расчёт mastery на примере
+
+Формула:
+
+```text
+base = round(100 × (successes + 0.25) / (mistakes + successes + 0.5))
+mastery = clamp(base - false_confidence × 12, 0, 100)
+```
+
+Пусть:
+
+```text
+mistakes = 3
+successes = 1
+false_confidence = 1
+```
+
+Тогда:
+
+```text
+base = round(100 × 1.25 / 4.5) = 28
+mastery = 28 - 12 = 16
+```
+
+Небольшие значения `0.25` и `0.5` являются сглаживанием, чтобы первые ответы не давали слишком резкие крайние оценки.
+
+## 44. Интервальное повторение на примере
+
+После успешного ответа `successes` увеличивается до расчёта даты.
+
+```text
+successes=1 → 2^1 = 2 дня
+successes=2 → 2^2 = 4 дня
+successes=3 → 2^3 = 8 дней
+successes>=4 → 2^4 = 16 дней
+```
+
+После ответа «не вспомнил» интервал сбрасывается на один день, а `mistakes` увеличивается.
+
+Это упрощённая spaced-repetition модель. Production-версия может использовать SM-2, FSRS или обучаемую модель памяти.
+
+## 45. Feynman Defense на примере
+
+Понятия материала:
+
+```text
+Leader election
+Replicated log
+Majority commitment
+Randomized timeout
+```
+
+Объяснение пользователя:
+
+```text
+Raft выбирает лидера, который копирует команды на другие серверы.
+```
+
+Покрыты `Leader election` и частично `Replicated log`. Пропущены `Majority commitment` и `Randomized timeout`.
+
+Если уверенность 100%, оба пропуска создают `false_confidence`. Ответ содержит:
+
+```json
+{
+  "coverage": 50,
+  "confidence": 100,
+  "covered": ["Leader election", "Replicated log"],
+  "missing": ["Majority commitment", "Randomized timeout"],
+  "blind_spots": ["..."],
+  "next_prompt": "Explain how Majority commitment connects to the main topic."
+}
+```
+
+Алгоритм не оценивает литературный стиль; он проверяет покрытие набора source-derived concepts.
+
+## 46. Примеры API-запросов через PowerShell
+
+### Регистрация
+
+```powershell
+$body = @{
+  username = "dias"
+  email = "dias@example.com"
+  full_name = "Dias Student"
+  password = "StrongPassword42"
+} | ConvertTo-Json
+
+$session = Invoke-RestMethod `
+  -Method Post `
+  -Uri "http://127.0.0.1:8000/api/auth/register" `
+  -ContentType "application/json" `
+  -Body $body
+```
+
+### Сохранение заголовка авторизации
+
+```powershell
+$headers = @{ Authorization = "Bearer $($session.access_token)" }
+```
+
+### Получение материалов
+
+```powershell
+Invoke-RestMethod `
+  -Uri "http://127.0.0.1:8000/api/lectures" `
+  -Headers $headers
+```
+
+### Загрузка файла
+
+Для загрузки удобнее использовать Swagger или `curl.exe`:
+
+```powershell
+curl.exe -X POST "http://127.0.0.1:8000/api/lectures" `
+  -H "Authorization: Bearer $($session.access_token)" `
+  -F "file=@C:\path\notes.txt"
+```
+
+### Вопрос к материалу
+
+```powershell
+$question = @{ question = "What is leader election?" } | ConvertTo-Json
+Invoke-RestMethod `
+  -Method Post `
+  -Uri "http://127.0.0.1:8000/api/lectures/demo-raft/ask" `
+  -Headers $headers `
+  -ContentType "application/json" `
+  -Body $question
+```
+
+## 47. Как пользоваться Swagger
+
+1. Запустить сервер.
+2. Зарегистрироваться через обычный интерфейс.
+3. Открыть `http://127.0.0.1:8000/docs`.
+4. Нажать `Authorize`.
+5. Ввести username и password.
+6. Swagger отправит форму на `/api/auth/token`.
+7. Полученный Bearer token автоматически добавится к следующим запросам.
+8. Открыть нужный endpoint, нажать `Try it out`, заполнить данные и выполнить запрос.
+
+Swagger генерируется из декораторов FastAPI, type hints, Pydantic-моделей и `response_model`.
+
+## 48. Транзакции и целостность
+
+Регистрация выполняет создание пользователя и перенос старых данных в одной транзакции. Если INSERT пользователя завершился ошибкой, перенос не будет частично применён.
+
+Quiz endpoint сохраняет попытку и обновляет все knowledge gaps внутри одного `with connect()`. Исключение откатывает транзакцию.
+
+Параметризованный SQL:
+
+```python
+db.execute("SELECT * FROM users WHERE id = ?", (user_id,))
+```
+
+отделяет SQL-код от пользовательского значения и защищает от SQL injection. Исключение — динамический список полей PATCH, но он собирается только из жёсткого allowlist `allowed`.
+
+## 49. Security review текущей версии
+
+### Уже реализовано
+
+- Argon2 вместо хранения паролей.
+- Случайный JWT-secret.
+- Проверка срока JWT.
+- Dummy password hash для уменьшения timing leak.
+- Case-insensitive уникальность username/email.
+- Pydantic-валидация.
+- Параметризованный SQL.
+- Проверка owner/user ID на сервере.
+- 404 вместо раскрытия чужого объекта.
+- Белый список расширений.
+- Ограничение размера файла и архива.
+- Нормализация пользовательского имени файла.
+- Секреты и БД исключены из Git/Docker context.
+
+### Что нужно для публичного production
+
+- HTTPS; без него токен можно перехватить в сети.
+- Rate limiting входа и загрузки.
+- Refresh tokens с ротацией и отзывом.
+- HttpOnly/SameSite cookie или усиленная CSP при localStorage.
+- Email verification и password reset.
+- Проверка MIME/magic bytes для всех форматов, не только PDF/ZIP.
+- Антивирусная проверка загрузок.
+- Audit log и мониторинг подозрительных входов.
+- Ограничение количества материалов на пользователя.
+
+## 50. Производительность и масштабирование
+
+Текущий MVP читает весь файл в память и обрабатывает его в запросе. Для 25 МБ и локального использования это приемлемо, но при большом числе пользователей появятся ограничения.
+
+Production-путь:
+
+```text
+FastAPI API
+  → загрузка в object storage
+  → задача в очереди
+  → worker извлекает текст
+  → worker вызывает AI
+  → PostgreSQL хранит статус
+  → frontend опрашивает job или получает WebSocket/SSE
+```
+
+SQLite имеет ограниченную конкурентную запись. PostgreSQL лучше подходит для нескольких API-инстансов.
+
+Gemini-запрос имеет timeout 75 секунд для учебного пакета и 45 секунд для ответа. При ошибке приложение использует fallback, поэтому сетевой сбой не превращается в полный отказ.
+
+## 51. Как читать traceback
+
+### `ModuleNotFoundError`
+
+Обычно выбран неправильный interpreter или не установлены `backend/requirements.txt`.
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install -r backend\requirements.txt
+```
+
+### `can't open file app/main.py`
+
+Старая PyCharm-конфигурация указывает на путь до разделения папок. Используйте модуль:
+
+```text
+uvicorn backend.app.main:app --reload
+```
+
+### `401 Not authenticated`
+
+Нет заголовка `Authorization` или frontend потерял токен. Выполнить вход заново.
+
+### `Could not validate credentials`
+
+Токен испорчен, истёк или JWT-secret изменился.
+
+### `422 Not enough readable text`
+
+Документ пустой, слишком короткий или PDF является сканом.
+
+### `409 This username is already registered`
+
+Сработал уникальный индекс SQLite. Нужно выбрать другой username.
+
+## 52. Как устроены backend-тесты
+
+В начале `test_app.py` до импорта приложения устанавливается временная папка:
+
+```python
+os.environ["STUDYCLOUD_DATA_DIR"] = tempfile.mkdtemp(...)
+```
+
+Это важно: `main.py` читает переменную при обращении к `data_dir()`, и тесты не касаются настоящей `data/studycloud.db`.
+
+Helper `register()` каждый раз создаёт уникальный username через UUID и возвращает готовый Bearer header.
+
+Тест изоляции создаёт двух пользователей:
+
+```text
+User A загружает файл
+User A видит ID
+User B не видит ID в списке
+User B получает 404 по прямому URL
+```
+
+Это сильнее обычной проверки списка: тест доказывает, что нельзя обойти защиту прямой подстановкой ID.
+
+## 53. Как добавить новый формат файла
+
+Допустим, нужно добавить `.json`.
+
+1. Добавить `.json` в `SUPPORTED_EXTENSIONS`.
+2. Добавить ветку в `extract_document()`.
+3. Преобразовать структуру в список:
+
+```python
+chunks = [
+    {"ref": "Object 1", "text": "нормализованный текст"}
+]
+```
+
+4. Определить корректное значение `units`.
+5. Добавить формат в frontend `supportedExtensions` и `accept` input.
+6. Добавить тест с реальным минимальным файлом.
+7. Проверить пустой, битый и слишком большой вариант.
+
+Главный контракт extractor: каждый chunk обязан иметь строковые `ref` и `text`.
+
+## 54. Как добавить новую таблицу
+
+Пример: `study_sessions`.
+
+1. Добавить `CREATE TABLE IF NOT EXISTS` в `init_database()`.
+2. Связать `user_id` внешним ключом.
+3. Создать индекс по часто используемому фильтру.
+4. Для старой базы использовать `ensure_column()` или отдельную migration-функцию.
+5. Все запросы фильтровать по ID из JWT.
+6. Добавить тест двух пользователей.
+
+Пример схемы:
+
+```sql
+CREATE TABLE IF NOT EXISTS study_sessions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id TEXT NOT NULL,
+    started_at TEXT NOT NULL,
+    duration_seconds INTEGER NOT NULL,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+```
+
+## 55. Как добавить endpoint правильно
+
+Пример персональной статистики с параметром:
+
+```python
+class SessionCreate(BaseModel):
+    duration_seconds: int = Field(ge=1, le=86400)
+
+
+@app.post("/api/sessions", status_code=201)
+def create_session(
+    request: SessionCreate,
+    current_user: dict[str, Any] = Depends(get_current_user),
+) -> dict[str, Any]:
+    with connect() as db:
+        cursor = db.execute(
+            "INSERT INTO study_sessions (user_id, started_at, duration_seconds) VALUES (?, ?, ?)",
+            (current_user["id"], datetime.now(UTC).isoformat(), request.duration_seconds),
+        )
+        row = db.execute(
+            "SELECT * FROM study_sessions WHERE id = ? AND user_id = ?",
+            (cursor.lastrowid, current_user["id"]),
+        ).fetchone()
+    return dict(row)
+```
+
+Здесь присутствуют все основные элементы проекта: Pydantic, JWT dependency, UTC, параметризованный SQL, `user_id` из токена и возврат своей записи.
+
+## 56. Как отлаживать upload пошагово
+
+Поставить breakpoints:
+
+1. Первая строка `upload_lecture()` — проверить `file.filename`.
+2. После `contents = await file.read(...)` — проверить размер.
+3. После `extract_document()` — посмотреть `units` и первые chunks.
+4. После `local_study_material()` — проверить quiz/flashcards.
+5. После Gemini — сравнить `generated` и fallback.
+6. Перед INSERT — проверить `current_user["id"]`.
+7. После `row_to_lecture()` — убедиться, что сырой `text_content` и `owner_id` не уходят клиенту.
+
+В PyCharm можно открыть Evaluate Expression и выполнить:
+
+```python
+chunks[:2]
+material["quiz"][0]
+current_user["id"]
+```
+
+## 57. Как доказать, что это backend-работа на неделю
+
+Разложение по задачам:
+
+### День 1 — архитектура и база
+
+- схема четырёх таблиц;
+- миграции;
+- foreign keys и индексы;
+- сохранение старых данных.
+
+### День 2 — auth
+
+- Pydantic-регистрация;
+- Argon2;
+- JWT;
+- OAuth2 Swagger;
+- dependency текущего пользователя.
+
+### День 3 — персональные данные
+
+- `owner_id`/`user_id`;
+- фильтрация каждого запроса;
+- безопасные 404;
+- first-user migration.
+
+### День 4 — ingestion
+
+- поддержка разных библиотек;
+- единый формат chunks;
+- source references;
+- ограничения файлов и архивов.
+
+### День 5 — learning engine
+
+- локальный summarizer;
+- quiz/flashcards;
+- Gemini fallback и нормализация.
+
+### День 6 — ProofLoop
+
+- попытки;
+- уверенность;
+- blind spots;
+- mastery/priority;
+- spaced review;
+- Feynman Defense.
+
+### День 7 — качество
+
+- Swagger;
+- тесты изоляции;
+- Docker;
+- CI;
+- документация и обработка ошибок.
+
+## 58. Расширенные вопросы на защите
+
+### Почему `owner_id` нельзя брать из request body?
+
+Пользователь мог бы отправить ID другого аккаунта. Поэтому owner определяется сервером из подписанного JWT.
+
+### Почему `owned_lecture()` возвращает 404, а не 403?
+
+`403` подтвердил бы существование объекта. `404` не раскрывает, есть ли такой чужой материал.
+
+### Зачем одновременно local engine и Gemini?
+
+Local engine гарантирует доступность без ключа и сети. Gemini повышает качество. Нормализатор сохраняет контракт ответа при проблемах модели.
+
+### Почему не хранить JWT в базе?
+
+Access JWT самодостаточен и проверяется подписью. Для отзыва сессий production-версия добавит refresh-token table или denylist.
+
+### Что произойдёт при смене JWT-secret?
+
+Все старые токены перестанут проходить проверку. Пользователи должны войти снова; данные аккаунтов не удалятся.
+
+### Есть ли SQL injection в динамическом PATCH?
+
+Имена колонок берутся не из request напрямую, а после фильтрации жёстким множеством `allowed`. Значения всё равно передаются параметрами `?`.
+
+### Почему source chunks важнее просто полного текста?
+
+Полный текст позволяет искать, но не объясняет происхождение утверждения. Chunks сохраняют страницы, слайды и секции, поэтому ответ можно проверить.
+
+### Почему `false_confidence` не просто boolean?
+
+Счётчик сохраняет повторяемость уверенных ошибок. Несколько таких ошибок повышают priority сильнее одной.
+
+### Почему demo доступен всем, но не редактируется?
+
+Он позволяет проверить продукт сразу после регистрации, при этом общая запись защищена от изменений конкретным пользователем.
+
+## 59. Ментальная модель всего backend
+
+Backend удобно запомнить как четыре слоя:
+
+```text
+HTTP слой
+  FastAPI routes + Pydantic + Swagger
+
+Security слой
+  Argon2 + JWT + get_current_user + ownership
+
+Domain слой
+  extraction + study pack + quiz + ProofLoop + Feynman
+
+Persistence слой
+  SQLite + JSON fields + uploads directory
+```
+
+Когда нужно понять любую функцию, задайте четыре вопроса:
+
+1. Какие данные она получает от HTTP-слоя?
+2. Как проверяется пользователь и входные значения?
+3. Какое учебное правило она реализует?
+4. Что она читает или изменяет в SQLite/файлах?
+
+Если на эти четыре вопроса есть ответы, логика конкретного участка backend полностью понятна.
 
