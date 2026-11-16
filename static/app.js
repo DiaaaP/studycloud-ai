@@ -34,6 +34,23 @@ const escapeHtml = (value = "") => String(value).replace(/[&<>'"]/g, character =
   "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;",
 }[character]));
 
+function apiErrorMessage(body = {}) {
+  const detail = body.detail;
+  if (Array.isArray(detail)) {
+    return detail.map(error => {
+      const field = error?.loc?.at(-1);
+      if (field === "username") return t("username_rules");
+      if (field === "email") return t("email_rules");
+      if (field === "password") return t("password_rules");
+      if (field === "full_name") return t("full_name_rules");
+      return error?.msg || t("invalid_data");
+    }).join(" ");
+  }
+  if (typeof detail === "string") return t(detail);
+  if (detail && typeof detail === "object") return detail.message || t("invalid_data");
+  return t("Something went wrong");
+}
+
 async function api(path, options = {}) {
   const token = localStorage.getItem(TOKEN_KEY);
   const headers = new Headers(options.headers || {});
@@ -43,7 +60,7 @@ async function api(path, options = {}) {
   const body = await response.json().catch(() => ({}));
   if (!response.ok) {
     if (response.status === 401 && !path.startsWith("/auth/")) showAuth(t("session_expired"));
-    throw new Error(t(body.detail || "Something went wrong"));
+    throw new Error(apiErrorMessage(body));
   }
   return body;
 }
@@ -122,7 +139,7 @@ async function authorizedFile(url, openInNewTab = false) {
   }
   if (!response.ok) {
     const body = await response.json().catch(() => ({}));
-    throw new Error(t(body.detail || "Something went wrong"));
+    throw new Error(apiErrorMessage(body));
   }
   const blobUrl = URL.createObjectURL(await response.blob());
   if (openInNewTab) {
