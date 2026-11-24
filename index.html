@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#151737">
+  <meta name="description" content="Демо StudyCloud AI: конспект, карточки и тест по учебному материалу.">
+  <link rel="icon" href="./icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="./styles.css">
+  <script src="./demo.js" defer></script>
+  <title>StudyCloud AI — Демо</title>
+</head>
+<body>
+  <header class="site-header">
+    <nav class="container navigation" aria-label="Навигация">
+      <a class="brand" href="./"><img src="./icon.svg" alt="" width="36" height="36">StudyCloud AI</a>
+      <a class="repo-link" href="https://github.com/DiaaaP/studycloud-ai">Репозиторий ↗</a>
+    </nav>
+  </header>
+
+  <main class="container">
+    <section class="hero" aria-labelledby="hero-title">
+      <p class="label">Демо без регистрации</p>
+      <h1 id="hero-title">Из лекции<br>в практику.</h1>
+      <p class="hero-description">Изучи пример конспекта, проверь себя карточками и найди ответы в исходном материале.</p>
+      <a class="button primary" href="#lecture">Открыть демолекцию ↓</a>
+    </section>
+
+    <section id="lecture" aria-labelledby="lecture-title">
+      <div class="section-heading">
+        <p class="label">Демо · Распределённые системы</p>
+        <h2 id="lecture-title">Консенсус в Raft</h2>
+      </div>
+      <div class="lecture-grid">
+        <article class="panel">
+          <h3>Краткий конспект</h3>
+          <p>Raft помогает нескольким серверам согласованно хранить журнал команд. Серверы выбирают лидера, он принимает команды клиентов и реплицирует записи. Запись считается зафиксированной, когда её сохранило большинство серверов.</p>
+          <ul class="ideas">
+            <li>Случайные тайм-ауты выборов снижают риск разделения голосов. <a href="#source-4">Стр. 4</a></li>
+            <li>Для победы на выборах кандидат должен получить большинство голосов. <a href="#source-7">Стр. 7</a></li>
+            <li>Изолированное меньшинство не может зафиксировать конфликтующую запись. <a href="#source-11">Стр. 11</a></li>
+          </ul>
+        </article>
+        <article class="panel flashcards" aria-labelledby="cards-title">
+          <div class="card-heading">
+            <h3 id="cards-title">Карточки</h3>
+            <span id="card-count" class="count" aria-live="polite">1 / 3</span>
+          </div>
+          <div class="flashcard" aria-live="polite">
+            <strong id="card-question">Когда ведомый сервер становится кандидатом?</strong>
+            <p id="card-answer" hidden></p>
+            <a id="card-source" href="#source-4" hidden></a>
+          </div>
+          <div class="card-controls">
+            <button class="button" id="previous-card" type="button" aria-label="Предыдущая карточка">←</button>
+            <button class="button" id="reveal-card" type="button" aria-expanded="false" aria-controls="card-answer">Показать ответ</button>
+            <button class="button" id="next-card" type="button" aria-label="Следующая карточка">→</button>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <section class="panel quiz-panel" id="quiz" aria-labelledby="quiz-title">
+      <h2 id="quiz-title">Проверь себя</h2>
+      <form id="quiz-form">
+        <fieldset data-answer="majority">
+          <legend>1. Сколько голосов нужно кандидату, чтобы стать лидером?</legend>
+          <label><input type="radio" name="election" value="one" required> Достаточно одного голоса</label>
+          <label><input type="radio" name="election" value="majority"> Большинство голосов</label>
+          <label><input type="radio" name="election" value="all"> Все голоса</label>
+          <p class="feedback" hidden>Кандидат побеждает, когда получает голоса большинства. <a href="#source-7">Стр. 7</a></p>
+        </fieldset>
+        <fieldset data-answer="stored">
+          <legend>2. Когда запись считается зафиксированной?</legend>
+          <label><input type="radio" name="commit" value="sent" required> Как только лидер её отправил</label>
+          <label><input type="radio" name="commit" value="client"> После подтверждения клиента</label>
+          <label><input type="radio" name="commit" value="stored"> Когда запись сохранило большинство серверов</label>
+          <p class="feedback" hidden>Лидер ждёт, пока запись сохранится у большинства серверов. <a href="#source-9">Стр. 9</a></p>
+        </fieldset>
+        <fieldset data-answer="no">
+          <legend>3. Может ли изолированное меньшинство зафиксировать конфликтующую запись?</legend>
+          <label><input type="radio" name="partition" value="no" required> Нет</label>
+          <label><input type="radio" name="partition" value="yes"> Да</label>
+          <p class="feedback" hidden>У изолированного меньшинства нет голосов большинства. <a href="#source-11">Стр. 11</a></p>
+        </fieldset>
+        <div class="quiz-actions">
+          <button class="button primary" type="submit">Проверить ответы</button>
+          <button class="button" id="reset-quiz" type="reset" hidden>Начать заново</button>
+          <output id="quiz-score" role="status"></output>
+        </div>
+      </form>
+    </section>
+
+    <section class="panel sources" aria-labelledby="sources-title">
+      <h2 id="sources-title">Фрагменты исходной лекции</h2>
+      <p>Перевод фрагментов из встроенного примера StudyCloud AI.</p>
+      <details id="source-4"><summary>Стр. 4 · Тайм-ауты</summary><p>Ведомые становятся кандидатами, когда перестают получать сигналы от лидера. Случайные тайм-ауты снижают вероятность разделения голосов, потому что кандидаты обычно начинают выборы в разные моменты.</p></details>
+      <details id="source-7"><summary>Стр. 7 · Выбор лидера</summary><p>Кандидат становится лидером после получения голосов большинства серверов. Лидер принимает команды клиентов, добавляет их в журнал и реплицирует вызовами AppendEntries.</p></details>
+      <details id="source-9"><summary>Стр. 9 · Фиксация записи</summary><p>Запись считается зафиксированной после того, как её сохранило большинство. Затем каждый сервер применяет запись к своей машине состояний. Raft выдерживает сбои, пока доступно большинство серверов.</p></details>
+      <details id="source-11"><summary>Стр. 11 · Разделение сети</summary><p>Разделение сети может изолировать меньшинство, но оно не может зафиксировать конфликтующие записи. Безопасность зависит от соблюдения ограничений выборов и правил согласования журналов.</p></details>
+    </section>
+  </main>
+
+  <footer class="container footer">
+    <p>Загрузка своих лекций, аккаунты и Gemini доступны в полной версии с сервером.</p>
+    <a href="https://github.com/DiaaaP/studycloud-ai#quick-start-on-windows">Как запустить полную версию ↗</a>
+  </footer>
+</body>
+</html>
