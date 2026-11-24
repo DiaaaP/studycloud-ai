@@ -610,6 +610,39 @@ function showFile(file) {
   uploadButton.disabled = false;
 }
 
+async function uploadLectureToWorkspace(file) {
+  const intent = await api("/lectures/upload-url", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ filename: file.name, size: file.size, content_type: file.type || "application/octet-stream" }),
+  });
+  if (intent.mode === "proxy") {
+    const form = new FormData();
+    form.append("file", file);
+    return api("/lectures", { method: "POST", body: form });
+  }
+
+  const uploadForm = new FormData();
+  Object.entries(intent.fields).forEach(([key, value]) => uploadForm.append(key, value));
+  uploadForm.append("file", file);
+  const uploaded = await fetch(intent.url, { method: "POST", body: uploadForm });
+  if (!uploaded.ok) throw new Error(t("upload_failed"));
+
+  for (let attempt = 0; attempt < 120; attempt += 1) {
+    const lecture = await api("/lectures/" + intent.lecture_id);
+    if (lecture.status === "FAILED") {
+      throw new Error(lecture.error_message || t("processing_failed"));
+    }
+    if (lecture.status === "READY") {
+      return lecture.engine === "Pending"
+        ? api("/lectures/" + intent.lecture_id + "/generate", { method: "POST" })
+        : lecture;
+    }
+    await new Promise(resolve => setTimeout(resolve, 1500));
+  }
+  throw new Error(t("processing_timed_out"));
+}
+
 fileInput.addEventListener("change", () => showFile(fileInput.files[0]));
 ["dragenter", "dragover"].forEach(event => dropzone.addEventListener(event, e => { e.preventDefault(); dropzone.classList.add("dragging"); }));
 ["dragleave", "drop"].forEach(event => dropzone.addEventListener(event, e => { e.preventDefault(); dropzone.classList.remove("dragging"); }));
@@ -625,12 +658,10 @@ $("#upload-form").addEventListener("submit", async event => {
   event.preventDefault();
   const file = fileInput.files[0];
   if (!file) return;
-  const form = new FormData();
-  form.append("file", file);
   uploadButton.disabled = true;
   $("#progress-panel").hidden = false;
   try {
-    state.activeLecture = await api("/lectures", { method: "POST", body: form });
+    state.activeLecture = await uploadLectureToWorkspace(file);
     state.questionIndex = 0;
     state.answers = Array(state.activeLecture.quiz.length).fill(null);
     state.confidences = Array(state.activeLecture.quiz.length).fill(null);

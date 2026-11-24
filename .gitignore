@@ -9,5 +9,14 @@ data/uploads/*
 !data/uploads/.gitkeep
 .pytest_cache/
 .coverage
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+terraform.tfvars
+terraform.tfvars.json
+crash.log
+backend/dist/*.zip
+worker/dist/*.zip
 
 

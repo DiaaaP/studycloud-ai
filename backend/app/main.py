@@ -9,7 +9,9 @@ import secrets
 import sqlite3
 import uuid
 import zipfile
-from contextlib import asynccontextmanager
+import boto3
+from contextlib import asynccontextmanager, nullcontext
+from functools import lru_cache
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from html.parser import HTMLParser
@@ -20,7 +22,7 @@ import httpx
 from docx import Document
 import jwt
 from fastapi import Depends, FastAPI, File, HTTPException, UploadFile, status
-from fastapi.responses import FileResponse, PlainTextResponse
+from fastapi.responses import FileResponse, PlainTextResponse, RedirectResponse, Response
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from fastapi.staticfiles import StaticFiles
 from jwt.exceptions import InvalidTokenError
@@ -28,6 +30,8 @@ from pptx import Presentation
 from pwdlib import PasswordHash
 from pydantic import BaseModel, Field, field_validator
 from pypdf import PdfReader
+
+from .aws_store import DuplicateAccountValue, enabled as aws_storage_enabled, get_store
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -185,11 +189,59 @@ def init_database() -> None:
         upgrade_legacy_lectures(db)
 
 
+def cloud_lecture(user_id: str, lecture_id: str, *, allow_demo: bool = True, with_content: bool = True) -> dict[str, Any] | None:
+    """Load a DynamoDB lecture and its larger extracted content from private S3."""
+    item = get_store().get_lecture_item(user_id, lecture_id, allow_demo=allow_demo)
+    if not item:
+        return None
+    item.setdefault("owner_id", "")
+    item.setdefault("text_content", "")
+    item.setdefault("source_chunks", [])
+    content_key = item.get("content_key")
+    if with_content and content_key and item.get("status") == "READY":
+        content = get_store().get_content(content_key)
+        item["text_content"] = content.get("text", "")
+        item["source_chunks"] = content.get("source_chunks", [])
+    for field in ("key_ideas", "quiz", "flashcards", "source_chunks"):
+        value = item.get(field, [])
+        if not isinstance(value, str):
+            item[field] = json.dumps(value, ensure_ascii=False)
+    return item
+
+
+def seed_cloud_demo() -> None:
+    sections = [
+        ("Page 2", "Distributed systems coordinate independent computers over a network. The Raft consensus algorithm keeps a replicated log consistent by electing one leader."),
+        ("Page 4", "Followers become candidates when they stop receiving leader heartbeats. Randomized election timeouts reduce split votes because candidates usually start elections at different moments."),
+        ("Page 7", "A candidate becomes leader after receiving votes from a majority of servers. The leader accepts client commands, appends them to its log, and replicates entries with AppendEntries RPC calls."),
+        ("Page 9", "An entry becomes committed after a majority stores it, then each server applies it to its state machine. Raft tolerates failures while a majority of the cluster remains available."),
+        ("Page 11", "Network partitions may isolate a minority, but that minority cannot commit conflicting entries. Safety requires servers to preserve election restrictions and log matching rules."),
+    ]
+    chunks = [{"ref": ref, "text": value} for ref, value in sections]
+    text = " ".join(value for _, value in sections)
+    material = local_study_material(text, chunks)
+    content_key = get_store().extracted_key("demo", "demo-raft")
+    item = {
+        "id": "demo-raft", "owner_id": "", "title": "Distributed Consensus: Raft",
+        "filename": "demo-raft.pdf", "pages": 12, "word_count": len(text.split()),
+        "summary": material["summary"], "key_ideas": material["key_ideas"],
+        "quiz": material["quiz"], "engine": "Local demo",
+        "created_at": datetime.now(UTC).isoformat(), "file_type": "PDF",
+        "flashcards": material["flashcards"], "content_key": content_key,
+    }
+    get_store().seed_demo(item, {"text": text, "source_chunks": chunks})
+
+
 def jwt_secret() -> str:
     configured = os.getenv("STUDYCLOUD_SECRET_KEY", "").strip()
     if configured:
         if len(configured) < 32:
             raise RuntimeError("STUDYCLOUD_SECRET_KEY must contain at least 32 characters")
+        return configured
+    if aws_storage_enabled():
+        configured = cloud_secret("jwt_secret")
+        if len(configured) < 32:
+            raise RuntimeError("The STUDYCLOUD secret must include a JWT secret of at least 32 characters")
         return configured
     secret_path = data_dir() / "jwt-secret.key"
     if secret_path.exists():
@@ -197,6 +249,29 @@ def jwt_secret() -> str:
     generated = secrets.token_urlsafe(48)
     secret_path.write_text(generated, encoding="utf-8")
     return generated
+
+
+@lru_cache(maxsize=1)
+def _cloud_secret_values() -> dict[str, str]:
+    secret_arn = os.getenv("STUDYCLOUD_SECRET_ARN", "").strip()
+    if not secret_arn:
+        return {}
+    region = os.getenv("AWS_REGION", os.getenv("AWS_DEFAULT_REGION", "ap-southeast-2"))
+    response = boto3.client("secretsmanager", region_name=region).get_secret_value(SecretId=secret_arn)
+    value = response.get("SecretString", "")
+    try:
+        parsed = json.loads(value)
+    except json.JSONDecodeError:
+        return {"jwt_secret": value}
+    return parsed if isinstance(parsed, dict) else {}
+
+
+def cloud_secret(name: str) -> str:
+    return str(_cloud_secret_values().get(name, "")).strip()
+
+
+def gemini_api_key() -> str:
+    return os.getenv("GEMINI_API_KEY", "").strip() or cloud_secret("gemini_api_key")
 
 
 def public_user(row: sqlite3.Row | dict[str, Any]) -> dict[str, Any]:
@@ -226,6 +301,12 @@ def create_access_token(user: sqlite3.Row | dict[str, Any]) -> str:
 
 
 def authenticate_user(username: str, password: str) -> sqlite3.Row | None:
+    if aws_storage_enabled():
+        user = get_store().get_user_by_login(username)
+        if not user or not user.get("is_active", True):
+            password_hash.verify(password, DUMMY_PASSWORD_HASH)
+            return None
+        return user if password_hash.verify(password, user["password_hash"]) else None
     with connect() as db:
         user = db.execute(
             "SELECT * FROM users WHERE username = ? COLLATE NOCASE AND is_active = 1",
@@ -251,6 +332,11 @@ def get_current_user(token: str = Depends(oauth2_scheme)) -> dict[str, Any]:
         user_id = subject.removeprefix("user:")
     except InvalidTokenError as error:
         raise credentials_error from error
+    if aws_storage_enabled():
+        user = get_store().get_user(user_id)
+        if not user or not user.get("is_active", True):
+            raise credentials_error
+        return user
     with connect() as db:
         user = db.execute("SELECT * FROM users WHERE id = ? AND is_active = 1", (user_id,)).fetchone()
     if not user:
@@ -265,6 +351,11 @@ def owned_lecture(
     *,
     write: bool = False,
 ) -> sqlite3.Row:
+    if aws_storage_enabled():
+        row = cloud_lecture(user_id, lecture_id, allow_demo=not write)
+        if not row or (write and row.get("owner_id") != user_id):
+            raise HTTPException(status_code=404, detail="Lecture not found")
+        return row
     if write:
         row = db.execute(
             "SELECT * FROM lectures WHERE id = ? AND owner_id = ?",
@@ -562,7 +653,7 @@ def normalize_material(material: dict[str, Any], fallback: dict[str, Any]) -> di
 
 
 async def gemini_study_material(text: str, chunks: list[dict[str, str]]) -> dict[str, Any] | None:
-    api_key = os.getenv("GEMINI_API_KEY", "").strip()
+    api_key = gemini_api_key()
     if not api_key:
         return None
     model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
@@ -576,7 +667,8 @@ async def gemini_study_material(text: str, chunks: list[dict[str, str]]) -> dict
     )
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
     try:
-        async with httpx.AsyncClient(timeout=75) as client:
+        timeout = 20 if aws_storage_enabled() else 75
+        async with httpx.AsyncClient(timeout=timeout) as client:
             response = await client.post(
                 url,
                 headers={"x-goog-api-key": api_key, "Content-Type": "application/json"},
@@ -726,6 +818,8 @@ def row_to_lecture(row: sqlite3.Row, include_quiz: bool = True) -> dict[str, Any
     lecture["quiz"] = json.loads(lecture["quiz"]) if include_quiz else []
     lecture.pop("text_content", None)
     lecture.pop("owner_id", None)
+    for field in ("PK", "SK", "record_type", "source_key", "content_key", "upload_size"):
+        lecture.pop(field, None)
     return lecture
 
 
@@ -745,6 +839,8 @@ def gap_to_dict(row: sqlite3.Row) -> dict[str, Any]:
     )
     gap["is_blind_spot"] = gap.get("false_confidence", 0) > 0
     gap.pop("user_id", None)
+    for field in ("PK", "SK", "record_type"):
+        gap.pop(field, None)
     return gap
 
 
@@ -799,6 +895,12 @@ class RegistrationRequest(BaseModel):
         return value.strip()
 
 
+class UploadIntent(BaseModel):
+    filename: str = Field(min_length=1, max_length=255)
+    size: int = Field(gt=0, le=MAX_FILE_SIZE)
+    content_type: str = Field(default="application/octet-stream", max_length=160)
+
+
 class LoginRequest(BaseModel):
     username: str = Field(min_length=1, max_length=160)
     password: str = Field(min_length=1, max_length=128)
@@ -820,7 +922,10 @@ class TokenResponse(BaseModel):
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    init_database()
+    if aws_storage_enabled():
+        seed_cloud_demo()
+    else:
+        init_database()
     yield
 
 
@@ -843,6 +948,21 @@ def token_response(user: sqlite3.Row | dict[str, Any]) -> dict[str, Any]:
 def register(request: RegistrationRequest) -> dict[str, Any]:
     user_id = uuid.uuid4().hex
     created_at = datetime.now(UTC).isoformat()
+    if aws_storage_enabled():
+        user = {
+            "id": user_id,
+            "username": request.username,
+            "email": request.email,
+            "full_name": clean_text(request.full_name),
+            "password_hash": password_hash.hash(request.password),
+            "is_active": True,
+            "created_at": created_at,
+        }
+        try:
+            get_store().create_user(user)
+        except DuplicateAccountValue as error:
+            raise HTTPException(status_code=409, detail=f"This {error.field} is already registered") from error
+        return token_response(user)
     try:
         with connect() as db:
             first_user = db.execute("SELECT COUNT(*) FROM users").fetchone()[0] == 0
@@ -911,6 +1031,21 @@ def health() -> dict[str, Any]:
 
 @app.get("/api/stats")
 def stats(current_user: dict[str, Any] = Depends(get_current_user)) -> dict[str, int]:
+    if aws_storage_enabled():
+        store = get_store()
+        lectures = store.list_lectures(current_user["id"])
+        attempts = store.list_records(current_user["id"], "ATTEMPT#")
+        gaps = store.list_records(current_user["id"], "GAP#")
+        total_score = sum(int(item.get("score", 0)) for item in attempts)
+        total_questions = sum(int(item.get("total", 0)) for item in attempts)
+        return {
+            "lectures": len(lectures),
+            "words": sum(int(item.get("word_count", 0)) for item in lectures),
+            "quizzes": len(attempts),
+            "accuracy": round(100 * total_score / total_questions) if total_questions else 0,
+            "open_gaps": sum(1 for item in gaps if int(item.get("mistakes", 0)) > int(item.get("successes", 0))),
+            "blind_spots": sum(1 for item in gaps if int(item.get("false_confidence", 0)) > 0),
+        }
     with connect() as db:
         lecture_stats = db.execute(
             """
@@ -944,6 +1079,11 @@ def stats(current_user: dict[str, Any] = Depends(get_current_user)) -> dict[str,
 
 @app.get("/api/lectures")
 def list_lectures(current_user: dict[str, Any] = Depends(get_current_user)) -> list[dict[str, Any]]:
+    if aws_storage_enabled():
+        return [
+            row_to_lecture(cloud_lecture(current_user["id"], item["id"], with_content=False) or item, include_quiz=False)
+            for item in get_store().list_lectures(current_user["id"])
+        ]
     with connect() as db:
         rows = db.execute(
             "SELECT * FROM lectures WHERE owner_id = ? OR id = 'demo-raft' ORDER BY created_at DESC",
@@ -957,9 +1097,53 @@ def get_lecture(
     lecture_id: str,
     current_user: dict[str, Any] = Depends(get_current_user),
 ) -> dict[str, Any]:
+    if aws_storage_enabled():
+        row = cloud_lecture(current_user["id"], lecture_id)
+        if not row:
+            raise HTTPException(status_code=404, detail="Lecture not found")
+        return row_to_lecture(row)
     with connect() as db:
         row = owned_lecture(db, lecture_id, current_user["id"])
     return row_to_lecture(row)
+
+
+@app.post("/api/lectures/{lecture_id}/generate")
+async def generate_lecture_pack(
+    lecture_id: str,
+    current_user: dict[str, Any] = Depends(get_current_user),
+) -> dict[str, Any]:
+    if not aws_storage_enabled():
+        with connect() as db:
+            row = owned_lecture(db, lecture_id, current_user["id"])
+        return row_to_lecture(row)
+
+    row = cloud_lecture(current_user["id"], lecture_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="Lecture not found")
+    if row.get("status") != "READY":
+        raise HTTPException(status_code=409, detail="The document is still processing")
+    if row.get("engine") != "Pending":
+        return row_to_lecture(row)
+
+    content = get_store().get_content(row["content_key"])
+    text = content.get("text", "")
+    chunks = content.get("source_chunks", [])
+    fallback = local_study_material(text, chunks)
+    generated = await gemini_study_material(text, chunks)
+    material = normalize_material(generated or fallback, fallback)
+    updated = get_store().update_lecture(
+        current_user["id"],
+        lecture_id,
+        {
+            "summary": material["summary"],
+            "key_ideas": material["key_ideas"],
+            "quiz": material["quiz"],
+            "flashcards": material["flashcards"],
+            "engine": material["engine"],
+        },
+    )
+    refreshed = cloud_lecture(current_user["id"], lecture_id)
+    return row_to_lecture(refreshed or updated or row)
 
 
 @app.patch("/api/lectures/{lecture_id}")
@@ -986,6 +1170,12 @@ def update_lecture(
         values["summary"] = clean_text(values["summary"])
     allowed = {"title", "summary", "key_ideas", "flashcards"}
     values = {key: value for key, value in values.items() if key in allowed}
+    if aws_storage_enabled():
+        row = get_store().update_lecture(current_user["id"], lecture_id, values)
+        if not row:
+            raise HTTPException(status_code=404, detail="Lecture not found")
+        hydrated = cloud_lecture(current_user["id"], lecture_id, allow_demo=False, with_content=True)
+        return row_to_lecture(hydrated or row)
     assignments = ", ".join(f"{key} = ?" for key in values)
     with connect() as db:
         owned_lecture(db, lecture_id, current_user["id"], write=True)
@@ -995,6 +1185,50 @@ def update_lecture(
         )
         row = db.execute("SELECT * FROM lectures WHERE id = ?", (lecture_id,)).fetchone()
     return row_to_lecture(row)
+
+
+@app.post("/api/lectures/upload-url", status_code=201)
+def create_upload_intent(
+    request: UploadIntent,
+    current_user: dict[str, Any] = Depends(get_current_user),
+) -> dict[str, Any]:
+    if not aws_storage_enabled():
+        return {"mode": "proxy"}
+    filename = Path(request.filename).name
+    extension = Path(filename).suffix.lower()
+    if extension not in SUPPORTED_EXTENSIONS:
+        supported = ", ".join(sorted(item.removeprefix(".").upper() for item in SUPPORTED_EXTENSIONS))
+        raise HTTPException(status_code=415, detail=f"Unsupported format. Use {supported}")
+
+    store = get_store()
+    if request.size < 1 or request.size > MAX_FILE_SIZE:
+        raise HTTPException(status_code=413, detail="File must be between 1 byte and 25 MB")
+    lecture_id = uuid.uuid4().hex[:12]
+    source_key = store.original_key(current_user["id"], lecture_id, extension)
+    content_key = store.extracted_key(current_user["id"], lecture_id)
+    created_at = datetime.now(UTC).isoformat()
+    lecture = {
+        "id": lecture_id,
+        "owner_id": current_user["id"],
+        "title": clean_text(Path(filename).stem.replace("_", " ").replace("-", " ")).title(),
+        "filename": filename,
+        "pages": 0,
+        "word_count": 0,
+        "summary": "",
+        "key_ideas": [],
+        "quiz": [],
+        "engine": "Pending",
+        "created_at": created_at,
+        "file_type": extension.removeprefix(".").upper(),
+        "flashcards": [],
+        "source_key": source_key,
+        "content_key": content_key,
+        "status": "UPLOADED",
+        "upload_size": request.size,
+    }
+    store.save_lecture(lecture)
+    upload = store.create_upload_form(source_key, request.content_type, MAX_FILE_SIZE)
+    return {"mode": "s3", "lecture_id": lecture_id, **upload}
 
 
 @app.post("/api/lectures", status_code=201)
@@ -1052,6 +1286,62 @@ def submit_quiz(
     current_user: dict[str, Any] = Depends(get_current_user),
 ) -> dict[str, Any]:
     now = datetime.now(UTC)
+    if aws_storage_enabled():
+        row = owned_lecture(None, lecture_id, current_user["id"])
+        quiz = json.loads(row["quiz"])
+        answers = submission.answers[: len(quiz)]
+        answers += [None] * (len(quiz) - len(answers))
+        confidences = submission.confidences[: len(quiz)]
+        confidences += [50] * (len(quiz) - len(confidences))
+        confidences = [max(0, min(100, int(value if value is not None else 50))) for value in confidences]
+        correct = [answer == item["correct_index"] for answer, item in zip(answers, quiz)]
+        score = sum(correct)
+        store = get_store()
+        store.save_attempt(
+            current_user["id"],
+            {
+                "id": uuid.uuid4().hex,
+                "lecture_id": lecture_id,
+                "score": score,
+                "total": len(quiz),
+                "answers": answers,
+                "confidences": confidences,
+                "created_at": now.isoformat(),
+            },
+        )
+        changed_gaps = []
+        blind_spots = []
+        for is_correct, confidence, item in zip(correct, confidences, quiz):
+            concept = str(item.get("concept") or item.get("answer") or "Key concept")[:120]
+            gap_id = store.gap_id(lecture_id, concept)
+            existing = store.get_gap(current_user["id"], gap_id)
+            mistakes = int(existing.get("mistakes", 0) if existing else 0) + (0 if is_correct else 1)
+            successes = int(existing.get("successes", 0) if existing else 0) + (1 if is_correct else 0)
+            previous_false_confidence = int(existing.get("false_confidence", 0) if existing else 0)
+            false_confidence = previous_false_confidence + (1 if not is_correct and confidence >= 75 else 0)
+            review_days = min(30, 2 ** min(successes, 4)) if is_correct else 1
+            gap = {
+                "concept": concept,
+                "mistakes": mistakes,
+                "successes": successes,
+                "evidence": str(item.get("explanation", "")),
+                "source_ref": str(item.get("source_ref", "Source")),
+                "next_review": (now + timedelta(days=review_days)).isoformat(),
+                "updated_at": now.isoformat(),
+                "false_confidence": false_confidence,
+                "last_confidence": confidence,
+            }
+            store.save_gap(current_user["id"], lecture_id, gap)
+            gap.update({"id": gap_id, "lecture_id": lecture_id, "user_id": current_user["id"]})
+            if not is_correct:
+                serialized = gap_to_dict(gap)
+                changed_gaps.append(serialized)
+                if confidence >= 75:
+                    blind_spots.append(serialized)
+        return {
+            "score": score, "total": len(quiz), "correct": correct,
+            "knowledge_gaps": changed_gaps, "blind_spots": blind_spots,
+        }
     with connect() as db:
         row = owned_lecture(db, lecture_id, current_user["id"])
         quiz = json.loads(row["quiz"])
@@ -1130,7 +1420,7 @@ def ranked_sources(question: str, chunks: list[dict[str, str]], limit: int = 3) 
 
 
 async def gemini_answer(question: str, sources: list[dict[str, str]]) -> str | None:
-    api_key = os.getenv("GEMINI_API_KEY", "").strip()
+    api_key = gemini_api_key()
     if not api_key:
         return None
     model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
@@ -1141,7 +1431,8 @@ async def gemini_answer(question: str, sources: list[dict[str, str]]) -> str | N
         f"Question: {question}\n\nEvidence:\n{evidence}"
     )
     try:
-        async with httpx.AsyncClient(timeout=45) as client:
+        timeout = 20 if aws_storage_enabled() else 45
+        async with httpx.AsyncClient(timeout=timeout) as client:
             response = await client.post(
                 f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
                 headers={"x-goog-api-key": api_key, "Content-Type": "application/json"},
@@ -1159,8 +1450,11 @@ async def ask_lecture(
     request: AskRequest,
     current_user: dict[str, Any] = Depends(get_current_user),
 ) -> dict[str, Any]:
-    with connect() as db:
-        row = owned_lecture(db, lecture_id, current_user["id"])
+    if aws_storage_enabled():
+        row = owned_lecture(None, lecture_id, current_user["id"])
+    else:
+        with connect() as db:
+            row = owned_lecture(db, lecture_id, current_user["id"])
     chunks = json.loads(row["source_chunks"] or "[]")
     sources = ranked_sources(request.question, chunks)
     answer = await gemini_answer(request.question, sources)
@@ -1197,7 +1491,7 @@ def defend_lecture(
     request: DefenseRequest,
     current_user: dict[str, Any] = Depends(get_current_user),
 ) -> dict[str, Any]:
-    with connect() as db:
+    with (nullcontext(None) if aws_storage_enabled() else connect()) as db:
         row = owned_lecture(db, lecture_id, current_user["id"])
         lecture = row_to_lecture(row)
         explanation_tokens = set(
@@ -1239,16 +1533,31 @@ def defend_lecture(
         now = datetime.now(UTC)
         blind_spots = []
         for item in missing[:6]:
-            existing = db.execute(
-                "SELECT * FROM knowledge_gaps WHERE user_id = ? AND lecture_id = ? AND concept = ?",
-                (current_user["id"], lecture_id, item["concept"]),
-            ).fetchone()
+            if aws_storage_enabled():
+                store = get_store()
+                existing = store.get_gap(current_user["id"], store.gap_id(lecture_id, item["concept"]))
+            else:
+                existing = db.execute(
+                    "SELECT * FROM knowledge_gaps WHERE user_id = ? AND lecture_id = ? AND concept = ?",
+                    (current_user["id"], lecture_id, item["concept"]),
+                ).fetchone()
             mistakes = (existing["mistakes"] if existing else 0) + 1
             successes = existing["successes"] if existing else 0
             false_confidence = (existing["false_confidence"] if existing else 0) + (
                 1 if request.confidence >= 75 else 0
             )
-            db.execute(
+            if aws_storage_enabled():
+                store.save_gap(
+                    current_user["id"], lecture_id,
+                    {
+                        "concept": item["concept"], "mistakes": mistakes, "successes": successes,
+                        "evidence": item["evidence"], "source_ref": item["source_ref"],
+                        "next_review": (now + timedelta(days=1)).isoformat(), "updated_at": now.isoformat(),
+                        "false_confidence": false_confidence, "last_confidence": request.confidence,
+                    },
+                )
+            else:
+                db.execute(
                 """
                 INSERT INTO knowledge_gaps
                 (user_id, lecture_id, concept, mistakes, successes, evidence, source_ref, next_review, updated_at,
@@ -1263,12 +1572,15 @@ def defend_lecture(
                     current_user["id"], lecture_id, item["concept"], mistakes, successes, item["evidence"], item["source_ref"],
                     (now + timedelta(days=1)).isoformat(), now.isoformat(), false_confidence, request.confidence,
                 ),
-            )
+                )
             if request.confidence >= 75:
-                gap = db.execute(
-                    "SELECT * FROM knowledge_gaps WHERE user_id = ? AND lecture_id = ? AND concept = ?",
-                    (current_user["id"], lecture_id, item["concept"]),
-                ).fetchone()
+                if aws_storage_enabled():
+                    gap = store.get_gap(current_user["id"], store.gap_id(lecture_id, item["concept"]))
+                else:
+                    gap = db.execute(
+                        "SELECT * FROM knowledge_gaps WHERE user_id = ? AND lecture_id = ? AND concept = ?",
+                        (current_user["id"], lecture_id, item["concept"]),
+                    ).fetchone()
                 blind_spots.append(gap_to_dict(gap))
 
     if coverage >= 80:
@@ -1298,6 +1610,20 @@ def defend_lecture(
 
 @app.get("/api/radar")
 def knowledge_radar(current_user: dict[str, Any] = Depends(get_current_user)) -> list[dict[str, Any]]:
+    if aws_storage_enabled():
+        store = get_store()
+        rows = store.list_records(current_user["id"], "GAP#")
+        for row in rows:
+            lecture = store.get_lecture_item(current_user["id"], str(row["lecture_id"]))
+            row["lecture_title"] = lecture.get("title", "Deleted lecture") if lecture else "Deleted lecture"
+        rows.sort(
+            key=lambda row: (
+                int(row.get("mistakes", 0)) * 2 - int(row.get("successes", 0)),
+                row.get("updated_at", ""),
+            ),
+            reverse=True,
+        )
+        return [gap_to_dict(row) for row in rows]
     with connect() as db:
         rows = db.execute(
             """
@@ -1313,11 +1639,33 @@ def knowledge_radar(current_user: dict[str, Any] = Depends(get_current_user)) ->
 
 @app.post("/api/radar/{gap_id}/review")
 def review_gap(
-    gap_id: int,
+    gap_id: str,
     review: GapReview,
     current_user: dict[str, Any] = Depends(get_current_user),
 ) -> dict[str, Any]:
     now = datetime.now(UTC)
+    if aws_storage_enabled():
+        store = get_store()
+        row = store.get_gap(current_user["id"], gap_id)
+        if not row:
+            raise HTTPException(status_code=404, detail="Knowledge gap not found")
+        mistakes = int(row["mistakes"]) + (0 if review.remembered else 1)
+        successes = int(row["successes"]) + (1 if review.remembered else 0)
+        false_confidence = max(0, int(row["false_confidence"]) - (1 if review.remembered else 0))
+        review_days = min(30, 2 ** min(successes, 4)) if review.remembered else 1
+        row.update(
+            {
+                "mistakes": mistakes,
+                "successes": successes,
+                "false_confidence": false_confidence,
+                "next_review": (now + timedelta(days=review_days)).isoformat(),
+                "updated_at": now.isoformat(),
+            }
+        )
+        store.save_gap(current_user["id"], str(row["lecture_id"]), row)
+        lecture = store.get_lecture_item(current_user["id"], str(row["lecture_id"]))
+        row["lecture_title"] = lecture.get("title", "Deleted lecture") if lecture else "Deleted lecture"
+        return gap_to_dict(row)
     with connect() as db:
         row = db.execute(
             "SELECT * FROM knowledge_gaps WHERE id = ? AND user_id = ?",
@@ -1354,8 +1702,11 @@ def export_lecture(
     lecture_id: str,
     current_user: dict[str, Any] = Depends(get_current_user),
 ) -> PlainTextResponse:
-    with connect() as db:
-        row = owned_lecture(db, lecture_id, current_user["id"])
+    if aws_storage_enabled():
+        row = owned_lecture(None, lecture_id, current_user["id"])
+    else:
+        with connect() as db:
+            row = owned_lecture(db, lecture_id, current_user["id"])
     lecture = row_to_lecture(row)
     lines = [f"# {lecture['title']}", "", "## Summary", "", lecture["summary"], "", "## Key ideas", ""]
     lines.extend(f"- {idea}" for idea in lecture["key_ideas"])
@@ -1374,7 +1725,13 @@ def export_lecture(
 def download_source(
     lecture_id: str,
     current_user: dict[str, Any] = Depends(get_current_user),
-) -> FileResponse:
+) -> Response:
+    if aws_storage_enabled():
+        row = owned_lecture(None, lecture_id, current_user["id"])
+        source_key = row.get("source_key")
+        if not source_key:
+            raise HTTPException(status_code=404, detail="Original source is not stored")
+        return RedirectResponse(get_store().create_download_url(source_key, row["filename"]), status_code=307)
     with connect() as db:
         row = owned_lecture(db, lecture_id, current_user["id"])
     candidates = list((data_dir() / "uploads").glob(f"{lecture_id}.*"))
@@ -1390,6 +1747,19 @@ def delete_lecture(
 ) -> None:
     if lecture_id == "demo-raft":
         raise HTTPException(status_code=400, detail="The built-in demo lecture cannot be deleted")
+    if aws_storage_enabled():
+        row = cloud_lecture(current_user["id"], lecture_id, allow_demo=False, with_content=False)
+        if not row:
+            raise HTTPException(status_code=404, detail="Lecture not found")
+        store = get_store()
+        store.delete_objects([key for key in (row.get("source_key"), row.get("content_key")) if key])
+        for prefix in ("ATTEMPT#", f"GAP#{lecture_id}#"):
+            for item in store.list_records(current_user["id"], prefix):
+                if prefix == "ATTEMPT#" and item.get("lecture_id") != lecture_id:
+                    continue
+                store.delete_record(item["PK"], item["SK"])
+        store.delete_record(store.user_pk(current_user["id"]), store.lecture_sk(lecture_id))
+        return
     with connect() as db:
         owned_lecture(db, lecture_id, current_user["id"], write=True)
         db.execute("DELETE FROM lectures WHERE id = ? AND owner_id = ?", (lecture_id, current_user["id"]))

@@ -1,0 +1,8 @@
+aws_region  = "ap-southeast-2"
+aws_profile = "project"
+project_name = "studycloud"
+environment  = "semester"
+
+# These artifacts must be built after the backend is adapted for AWS.
+api_lambda_package_path    = "../../backend/dist/api.zip"
+worker_lambda_package_path = "../../worker/dist/worker.zip"
